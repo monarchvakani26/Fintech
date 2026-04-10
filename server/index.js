@@ -5,6 +5,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const { connectDB } = require('./config/database');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -91,19 +92,17 @@ app.use((err, req, res, next) => {
 });
 
 // ========== START SERVER ==========
-app.listen(PORT, () => {
-  console.log('\n╔════════════════════════════════════════╗');
-  console.log('║  RAKSHAK AI - THE SOVEREIGN ARCHIVE   ║');
-  console.log('╠════════════════════════════════════════╣');
-  console.log(`║  Server running on port ${PORT}           ║`);
-  console.log('║  Status: SOVEREIGN ACTIVE              ║');
-  console.log('║  Neural Engine: ONLINE                 ║');
-  console.log('╠════════════════════════════════════════╣');
-  console.log('║  Demo Accounts:                        ║');
-  console.log('║  demo@rakshak.ai / Demo@123            ║');
-  console.log('║  suspicious@rakshak.ai / Demo@123      ║');
-  console.log('║  risky@rakshak.ai / Demo@123           ║');
-  console.log('╚════════════════════════════════════════╝\n');
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log('\n╔════════════════════════════════════════╗');
+    console.log('║  RAKSHAK AI - THE SOVEREIGN ARCHIVE   ║');
+    console.log('╠════════════════════════════════════════╣');
+    console.log(`║  Server running on port ${PORT}           ║`);
+    console.log('║  Status: SOVEREIGN ACTIVE              ║');
+    console.log('║  Neural Engine: ONLINE                 ║');
+    console.log('║  Database: MONGODB CONNECTED           ║');
+    console.log('╚════════════════════════════════════════╝\n');
+  });
 });
 
 module.exports = app;
