@@ -11,7 +11,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
-const { initSocket } = require('./socket');
+const { initSocket, emitUserUpdate } = require('./socket');
 
 let WebSocketServer;
 try { ({ WebSocketServer } = require('ws')); } catch (e) { WebSocketServer = null; }
@@ -104,53 +104,33 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ========== WEBSOCKET LIVE THREAT FEED ==========
-const server = http.createServer(app);
+// ========== WEBSOCKET LIVE THREAT FEED (via Socket.IO) ==========
 
-let broadcast = () => {};
+const THREAT_EVENTS = [
+  { eventStatus: 'BLOCKED', amount: 215000, recipient: 'fraud001@darkweb', score: 94, location: 'Amsterdam, NL', factor: 'VPN + Blacklisted IP' },
+  { eventStatus: 'REVIEW',  amount: 75000,  recipient: 'new.vendor@ybl',   score: 58, location: 'Jaipur, IN',    factor: 'New Device + Late Night' },
+  { eventStatus: 'BLOCKED', amount: 450000, recipient: 'scam@fakepay',     score: 89, location: 'Lagos, NG',     factor: 'Recipient Watchlisted' },
+  { eventStatus: 'APPROVED',amount: 8500,   recipient: 'priya.sharma@upi', score: 8,  location: 'Bangalore, IN', factor: 'Trusted Pattern' },
+  { eventStatus: 'BLOCKED', amount: 180000, recipient: 'cashout@upi',      score: 76, location: 'Beijing, CN',   factor: 'Country Mismatch + VPN' },
+];
 
-if (WebSocketServer) {
-  const wss = new WebSocketServer({ server });
-
-  broadcast = (data) => {
-    wss.clients.forEach(client => {
-      if (client.readyState === 1) {
-        client.send(JSON.stringify(data));
-      }
-    });
-  };
-
-  wss.on('connection', (ws) => {
-    ws.send(JSON.stringify({ type: 'CONNECTED', message: 'Rakshak AI Live Threat Feed Active' }));
+let threatIdx = 0;
+const emitThreat = () => {
+  const event = THREAT_EVENTS[threatIdx % THREAT_EVENTS.length];
+  io.to('dashboard').emit('THREAT_EVENT', {
+    type: 'THREAT_EVENT',
+    ...event,
+    reference: `TXN-${Math.floor(Math.random() * 90000) + 10000}`,
+    timestamp: new Date().toISOString(),
   });
+  threatIdx++;
+  setTimeout(emitThreat, 12000 + Math.random() * 8000);
+};
 
-  const THREAT_EVENTS = [
-    { eventStatus: 'BLOCKED', amount: 215000, recipient: 'fraud001@darkweb', score: 94, location: 'Amsterdam, NL', factor: 'VPN + Blacklisted IP' },
-    { eventStatus: 'REVIEW',  amount: 75000,  recipient: 'new.vendor@ybl',   score: 58, location: 'Jaipur, IN',    factor: 'New Device + Late Night' },
-    { eventStatus: 'BLOCKED', amount: 450000, recipient: 'scam@fakepay',     score: 89, location: 'Lagos, NG',     factor: 'Recipient Watchlisted' },
-    { eventStatus: 'APPROVED',amount: 8500,   recipient: 'priya.sharma@upi', score: 8,  location: 'Bangalore, IN', factor: 'Trusted Pattern' },
-    { eventStatus: 'BLOCKED', amount: 180000, recipient: 'cashout@upi',      score: 76, location: 'Beijing, CN',   factor: 'Country Mismatch + VPN' },
-  ];
+const broadcast = (data) => io.to('dashboard').emit('THREAT_EVENT', data);
 
-  let threatIdx = 0;
-  const emitThreat = () => {
-    const event = THREAT_EVENTS[threatIdx % THREAT_EVENTS.length];
-    broadcast({
-      type: 'THREAT_EVENT',
-      ...event,
-      reference: `TXN-${Math.floor(Math.random() * 90000) + 10000}`,
-      timestamp: new Date().toISOString(),
-    });
-    threatIdx++;
-    // Schedule next threat with random interval 12-20 seconds
-    setTimeout(emitThreat, 12000 + Math.random() * 8000);
-  };
+console.log('WebSocket Live Threat Feed: ACTIVE (via Socket.IO)');
 
-  // Start threat feed after 5 seconds
-  setTimeout(emitThreat, 5000);
-
-  console.log('WebSocket Live Threat Feed: ACTIVE');
-}
 
 // ========== START SERVER ==========
 connectDB().then(() => {
@@ -170,6 +150,8 @@ connectDB().then(() => {
     console.log('║  suspicious@rakshak.ai / Demo@123      ║');
     console.log('║  risky@rakshak.ai / Demo@123           ║');
     console.log('╚════════════════════════════════════════╝\n');
+    // Start threat feed 5 seconds after server is live
+    setTimeout(emitThreat, 5000);
   });
 });
 
