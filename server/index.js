@@ -1,18 +1,24 @@
 // ============================================================
 // Rakshak AI - The Sovereign Archive
-// Express.js Backend Server
+// Express.js Backend Server with Socket.IO Real-Time Engine
 // ============================================================
 
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const { connectDB } = require('./config/database');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
+const { initSocket } = require('./socket');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// ========== INITIALIZE SOCKET.IO ==========
+const io = initSocket(server);
 
 // ========== SECURITY MIDDLEWARE ==========
 app.use(helmet({
@@ -56,7 +62,8 @@ app.get('/api/health', (req, res) => {
     status: 'operational',
     message: 'Rakshak AI Sovereign Archive - Online',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: '2.0.0',
+    realtime: 'Socket.IO Active',
   });
 });
 
@@ -69,6 +76,7 @@ app.use('/api/audit', require('./routes/audit'));
 app.use('/api/demo', require('./routes/demo'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/blockchain', require('./routes/blockchain'));
+app.use('/api/user', require('./routes/user'));
 
 // ========== SEED BLOCKCHAIN FROM EXISTING DATA ==========
 const store = require('./data/store');
@@ -93,7 +101,7 @@ app.use((err, req, res, next) => {
 
 // ========== START SERVER ==========
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log('\n╔════════════════════════════════════════╗');
     console.log('║  RAKSHAK AI - THE SOVEREIGN ARCHIVE   ║');
     console.log('╠════════════════════════════════════════╣');
@@ -101,6 +109,7 @@ connectDB().then(() => {
     console.log('║  Status: SOVEREIGN ACTIVE              ║');
     console.log('║  Neural Engine: ONLINE                 ║');
     console.log('║  Database: MONGODB CONNECTED           ║');
+    console.log('║  Real-Time: SOCKET.IO ACTIVE           ║');
     console.log('╚════════════════════════════════════════╝\n');
   });
 });

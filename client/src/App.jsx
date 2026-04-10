@@ -1,13 +1,16 @@
 // ============================================================
 // Rakshak AI - App Router
-// React Router 6 with protected routes
+// React Router 6 with protected routes + Socket.IO context
 // ============================================================
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import DataCollection from './pages/DataCollection';
+
 import Payments from './pages/Payments';
 import PaymentAnalysis from './pages/PaymentAnalysis';
 import PaymentResult from './pages/PaymentResult';
@@ -73,6 +76,14 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
+      <Route path="/data-collection" element={
+        <ProtectedRoute>
+          <DataCollection />
+        </ProtectedRoute>
+      } />
+
+
+
       <Route path="/payments" element={
         <ProtectedRoute>
           <Payments />
@@ -132,30 +143,32 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              fontFamily: 'Inter, sans-serif',
-              fontSize: '14px',
-              fontWeight: '500',
-              borderRadius: '12px',
-              boxShadow: '0 4px 16px rgba(26, 10, 12, 0.15)',
-            },
-            success: {
-              style: { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' },
-              iconTheme: { primary: '#22c55e', secondary: '#f0fdf4' },
-            },
-            error: {
-              style: { background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' },
-              iconTheme: { primary: '#ef4444', secondary: '#fef2f2' },
-            },
-          }}
-        />
-      </BrowserRouter>
+      <SocketProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '14px',
+                fontWeight: '500',
+                borderRadius: '12px',
+                boxShadow: '0 4px 16px rgba(26, 10, 12, 0.15)',
+              },
+              success: {
+                style: { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' },
+                iconTheme: { primary: '#22c55e', secondary: '#f0fdf4' },
+              },
+              error: {
+                style: { background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' },
+                iconTheme: { primary: '#ef4444', secondary: '#fef2f2' },
+              },
+            }}
+          />
+        </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   );
 }
