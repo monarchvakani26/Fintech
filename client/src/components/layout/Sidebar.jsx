@@ -8,13 +8,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, CreditCard, Shield, ScrollText,
   Settings, HelpCircle, LogOut, ShieldCheck, Link2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const navItems = [
   { to: '/dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
+  { to: '/data-collection', label: 'DATA COLLECTION', icon: ClipboardList },
   { to: '/payments', label: 'PAYMENTS', icon: CreditCard },
   { to: '/security-hub', label: 'SECURITY HUB', icon: Shield },
   { to: '/blockchain', label: 'BLOCKCHAIN', icon: Link2 },

@@ -105,12 +105,13 @@ app.use((err, req, res, next) => {
 });
 
 // ========== WEBSOCKET LIVE THREAT FEED ==========
-const server = http.createServer(app);
-
 let broadcast = () => {};
 
-if (WebSocketServer) {
-  const wss = new WebSocketServer({ server });
+function setupWebSocketFeed() {
+  if (!WebSocketServer) return;
+
+  // Use noServer mode to avoid conflicting with Socket.IO's upgrade handler
+  const wss = new WebSocketServer({ noServer: true });
 
   broadcast = (data) => {
     wss.clients.forEach(client => {
@@ -122,6 +123,18 @@ if (WebSocketServer) {
 
   wss.on('connection', (ws) => {
     ws.send(JSON.stringify({ type: 'CONNECTED', message: 'Rakshak AI Live Threat Feed Active' }));
+  });
+
+  // Manually route HTTP upgrade requests:
+  // - /ws/threats → raw WebSocket threat feed
+  // - everything else → let Socket.IO handle it
+  server.on('upgrade', (req, socket, head) => {
+    if (req.url === '/ws/threats') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    }
+    // Socket.IO handles its own upgrades internally; don't destroy the socket
   });
 
   const THREAT_EVENTS = [
@@ -153,8 +166,47 @@ if (WebSocketServer) {
 }
 
 // ========== START SERVER ==========
-connectDB().then(() => {
+function killPortAndRetry() {
+  console.log(`\n⚠ Port ${PORT} is busy — killing stale process...`);
+  const { execSync } = require('child_process');
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano | findstr ":${PORT}" | findstr "LISTENING"`, { encoding: 'utf8' });
+      const pids = [...new Set(out.trim().split('\n').map(l => l.trim().split(/\s+/).pop()))];
+      for (const pid of pids) {
+        if (pid && pid !== '0' && pid !== String(process.pid)) {
+          try { execSync(`taskkill /F /PID ${pid}`, { encoding: 'utf8' }); console.log(`  ✓ Killed PID ${pid}`); } catch { /* already dead */ }
+        }
+      }
+    } else {
+      execSync(`fuser -k ${PORT}/tcp`, { encoding: 'utf8' });
+    }
+    setTimeout(() => {
+      console.log(`  ↻ Retrying port ${PORT}...`);
+      startServer();
+    }, 1500);
+  } catch (killErr) {
+    console.error(`  ✗ Could not free port ${PORT}. Kill the process manually and try again.`);
+    process.exit(1);
+  }
+}
+
+function startServer() {
+  // Register error handler BEFORE listen to guarantee it catches EADDRINUSE
+  server.removeAllListeners('error');
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      killPortAndRetry();
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
+  });
+
   server.listen(PORT, () => {
+    // Set up WebSocket feed only AFTER server is successfully listening
+    setupWebSocketFeed();
+
     console.log('\n╔════════════════════════════════════════╗');
     console.log('║  RAKSHAK AI - THE SOVEREIGN ARCHIVE   ║');
     console.log('╠════════════════════════════════════════╣');
@@ -171,6 +223,10 @@ connectDB().then(() => {
     console.log('║  risky@rakshak.ai / Demo@123           ║');
     console.log('╚════════════════════════════════════════╝\n');
   });
+}
+
+connectDB().then(() => {
+  startServer();
 });
 
 
