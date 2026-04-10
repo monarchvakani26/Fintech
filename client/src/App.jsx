@@ -17,6 +17,7 @@ import PaymentResult from './pages/PaymentResult';
 import AuditTrail from './pages/AuditTrail';
 import BlockchainExplorer from './pages/BlockchainExplorer';
 import Settings from './pages/Settings';
+import SecurityHub from './pages/SecurityHub';
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -104,7 +105,7 @@ function AppRoutes() {
 
       <Route path="/security-hub" element={
         <ProtectedRoute>
-          <Dashboard />
+          <SecurityHub />
         </ProtectedRoute>
       } />
 

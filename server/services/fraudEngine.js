@@ -81,7 +81,9 @@ async function analyzeFraud(params) {
 
   // ========== 2. DEVICE FINGERPRINT RISK ==========
   const deviceFpHash = crypto.createHash('sha256').update(deviceFingerprint || 'unknown').digest('hex');
-  const knownDevice = user.devices.find(d => d.fingerprint === deviceFpHash);
+  const deviceList = Array.isArray(user.devices) ? user.devices :
+    (user.devices?.trusted_devices || []); // handle MongoDB nested structure
+  const knownDevice = deviceList.find(d => d.fingerprint === deviceFpHash);
   const deviceInfo = {
     fingerprint: deviceFpHash,
     isNewDevice: !knownDevice,
@@ -104,7 +106,7 @@ async function analyzeFraud(params) {
   // ========== 3. LOCATION RISK ==========
   const vpnDetected = isVPNorProxy(ip);
   const blacklisted = isBlacklisted(ip);
-  const primaryLocation = user.locations[0];
+  const primaryLocation = (user.locations && user.locations[0]) || null;
   const countryMismatch = primaryLocation && primaryLocation.country !== country;
   const cityMismatch = primaryLocation && primaryLocation.city !== city;
 
@@ -175,7 +177,7 @@ async function analyzeFraud(params) {
     breakdown.velocityRisk += 10;
   }
 
-  if (amount > user.transactionStats.averageAmount * 5) {
+  if (amount > (user.transactionStats?.averageAmount || 5000) * 5) {
     breakdown.velocityRisk += 20;
   }
   breakdown.velocityRisk = Math.min(breakdown.velocityRisk, 25);
@@ -194,7 +196,7 @@ async function analyzeFraud(params) {
   riskScore += breakdown.recipientRisk;
 
   // ========== 7. VARIANCE ANALYSIS ==========
-  const avgAmount = user.transactionStats.averageAmount || 10000;
+  const avgAmount = user.transactionStats?.averageAmount || 10000;
   const variancePct = ((amount - avgAmount) / avgAmount) * 100;
   const varianceStr = (variancePct >= 0 ? '+' : '') + variancePct.toFixed(0) + '%';
 
