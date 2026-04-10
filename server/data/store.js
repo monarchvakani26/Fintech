@@ -431,6 +431,9 @@ const store = {
   blacklistToken: (token) => tokenBlacklist.add(token),
   isTokenBlacklisted: (token) => tokenBlacklist.has(token),
 
+  // Get ALL transactions across all users (for security metrics)
+  getAllTransactions: () => transactions,
+
   // Generate reference
   genRef,
   generateTxHash,

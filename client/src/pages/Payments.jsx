@@ -1,9 +1,9 @@
 // ============================================================
 // Rakshak AI - Payments Page
-// Sovereign Checkout Experience - matches Image 3
+// + Real-time risk preview as user types
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, BookOpen, Shield, ArrowRight, AtSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,6 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import { generateDeviceFingerprint, collectDeviceSignals } from '../utils/deviceFingerprint';
 import api from '../services/api';
 
-// Format amount as user types
 function formatAmountInput(value) {
   const nums = value.replace(/[^\d.]/g, '');
   const parts = nums.split('.');
@@ -27,6 +26,7 @@ export default function Payments() {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [vpaError, setVpaError] = useState('');
+  const [previewRisk, setPreviewRisk] = useState(null);
   const navigate = useNavigate();
 
   const validateVPA = (value) => {
@@ -45,6 +45,23 @@ export default function Payments() {
     setAmount(formatted);
   };
 
+  // Real-time client-side risk preview
+  useEffect(() => {
+    const numAmount = parseFloat(amount) || 0;
+    if (numAmount <= 0) { setPreviewRisk(null); return; }
+
+    let score = 0;
+    if (numAmount <= 10000) score = 5;
+    else if (numAmount <= 50000) score = 15;
+    else if (numAmount <= 100000) score = 30;
+    else score = 50;
+
+    // Add VPA risk
+    if (vpa && !vpa.includes('@')) score += 5;
+
+    setPreviewRisk(score);
+  }, [amount, vpa]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const vpaErr = validateVPA(vpa);
@@ -59,7 +76,6 @@ export default function Payments() {
       const fingerprint = generateDeviceFingerprint();
       const signals = collectDeviceSignals();
 
-      // Step 1: Initiate transaction
       const initiateRes = await api.post('/payments/initiate', {
         recipientVPA: vpa,
         amount: parseFloat(amount),
@@ -67,14 +83,11 @@ export default function Payments() {
         deviceFingerprint: fingerprint,
       });
 
-      if (!initiateRes.data.success) {
-        throw new Error(initiateRes.data.message);
-      }
+      if (!initiateRes.data.success) throw new Error(initiateRes.data.message);
 
       const { transactionId } = initiateRes.data;
       toast.success('Transaction initiated — running AI analysis...', { icon: '🛡️' });
 
-      // Step 2: Run analysis (async - navigate to analysis screen)
       navigate(`/payments/analyze/${transactionId}`, {
         state: {
           transactionId,
@@ -83,6 +96,7 @@ export default function Payments() {
           note,
           deviceFingerprint: fingerprint,
           deviceSignals: signals,
+          isDemo: false,
         },
       });
     } catch (err) {
@@ -92,17 +106,24 @@ export default function Payments() {
     }
   };
 
+  const riskColor = previewRisk === null ? '' :
+    previewRisk <= 20 ? 'text-green-600' :
+    previewRisk <= 40 ? 'text-orange-500' : 'text-red-600';
+
+  const riskDotColor = previewRisk === null ? '' :
+    previewRisk <= 20 ? 'bg-green-500' :
+    previewRisk <= 40 ? 'bg-orange-400' : 'bg-red-500';
+
+  const riskLabel = previewRisk === null ? '' :
+    previewRisk <= 20 ? 'LOW RISK' :
+    previewRisk <= 40 ? 'MODERATE RISK' : 'HIGH RISK — full AI analysis runs on submit';
+
   return (
     <DashboardLayout>
       <div className="max-w-5xl">
         <div className="grid grid-cols-2 gap-10 items-start">
           {/* ====== LEFT: Branding ====== */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            {/* Protocol badge */}
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
             <div className="inline-flex items-center gap-2 bg-green-100 border border-green-200 text-green-700 rounded-full px-4 py-1.5 text-xs font-semibold mb-6">
               <Shield className="w-3.5 h-3.5" />
               SECURE PROTOCOL 2.4
@@ -117,7 +138,6 @@ export default function Payments() {
               Your data is protected by high-end financial broadsheet security.
             </p>
 
-            {/* Feature cards */}
             <div className="space-y-4">
               <div className="card-cream p-4 flex items-start gap-4">
                 <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
@@ -142,11 +162,7 @@ export default function Payments() {
           </motion.div>
 
           {/* ====== RIGHT: Payment Form ====== */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
             <div className="card p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-black text-dark">Initiate Payment</h2>
@@ -195,6 +211,17 @@ export default function Payments() {
                       className="input-field pl-8 text-xl font-bold"
                     />
                   </div>
+                  {/* Real-time risk preview */}
+                  {previewRisk !== null && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex items-center gap-2 text-xs font-semibold mt-2 ${riskColor}`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${riskDotColor}`} />
+                      Preliminary Risk Preview: {riskLabel}
+                    </motion.div>
+                  )}
                 </div>
 
                 {/* Note */}
@@ -211,7 +238,7 @@ export default function Payments() {
                   />
                 </div>
 
-                {/* PAY NOW */}
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -230,7 +257,6 @@ export default function Payments() {
                   )}
                 </button>
 
-                {/* Security badges */}
                 <div className="flex items-center justify-center gap-3 text-xs text-dark/30 mt-2">
                   <span className="w-2 h-2 rounded-full bg-green-400" />
                   <span>|</span>
@@ -240,7 +266,6 @@ export default function Payments() {
               </form>
             </div>
 
-            {/* Transaction fee */}
             <div className="flex items-center justify-between mt-4 px-2">
               <span className="text-xs text-dark/50 font-semibold uppercase tracking-wider">Transaction Fee</span>
               <span className="text-xs font-bold text-primary">₹0.00 (Waived)</span>

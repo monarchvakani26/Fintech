@@ -407,6 +407,62 @@ export default function Settings() {
                   </div>
                 )}
 
+                {/* ── DEVICES ── */}
+                {activeTab === 'devices' && (
+                  <div className="card p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                        <Smartphone className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-dark text-base">Registered Devices</h3>
+                        <p className="text-xs text-dark/40">Manage your trusted devices</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {(user?.devices || []).map((device, i) => (
+                        <div key={i} className="flex items-center justify-between p-4 bg-cream-light rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                              <Smartphone className="w-5 h-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-dark">{device.platform || 'Unknown Device'}</p>
+                              <p className="text-xs text-dark/50">{device.screenResolution || 'Unknown Resolution'}</p>
+                              <p className="text-xs text-dark/40 mt-0.5">
+                                First seen: {device.firstSeen ? new Date(device.firstSeen).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'}
+                              </p>
+                              {device.fingerprint && (
+                                <p className="text-xs font-mono text-dark/30 mt-0.5">
+                                  FP: {device.fingerprint.slice(0, 16)}...
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {device.trusted ? (
+                              <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-lg">Trusted</span>
+                            ) : (
+                              <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-lg">Pending</span>
+                            )}
+                            {!device.trusted && (
+                              <button
+                                disabled
+                                className="text-xs font-semibold text-red-400 bg-red-50 px-2 py-1 rounded-lg opacity-50 cursor-not-allowed"
+                                title="Available in full version"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {(!user?.devices || user.devices.length === 0) && (
+                        <p className="text-dark/40 text-sm text-center py-8">No registered devices.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

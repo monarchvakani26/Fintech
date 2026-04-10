@@ -1,6 +1,6 @@
 // ============================================================
 // Rakshak AI - Dashboard Page
-// Balance, Trust Score, Recent Transactions - matches Image 1
+// Balance, Trust Score, Recent Transactions + DNA Heatmap + WebSocket
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -15,6 +15,7 @@ import StatusBadge from '../components/common/StatusBadge';
 import { formatCurrency, formatDate, getRiskLevel } from '../utils/formatters';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 // Animated number counter
 function AnimatedBalance({ value }) {
@@ -59,14 +60,79 @@ function CustomTooltip({ active, payload }) {
   return null;
 }
 
+// Transaction DNA Heatmap
+function DnaHeatmap({ transactions }) {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Build activity grid [day][hour]
+  const grid = Array(7).fill(null).map(() => Array(24).fill(0));
+  (transactions || []).forEach(txn => {
+    const d = new Date(txn.createdAt);
+    const dow = (d.getDay() + 6) % 7; // Mon=0
+    const hour = d.getHours();
+    grid[dow][hour]++;
+  });
+  const maxVal = Math.max(1, ...grid.flat());
+
+  const getCellColor = (val, hour) => {
+    if (val === 0) return 'bg-cream-dark/20';
+    const ratio = val / maxVal;
+    if (ratio < 0.3) return 'bg-primary/20';
+    if (ratio < 0.6) return 'bg-primary/50';
+    return 'bg-primary';
+  };
+
+  const isUnusual = (hour) => hour >= 2 && hour <= 5;
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="flex gap-1 mb-1">
+        <div className="w-8" />
+        {hours.map(h => (
+          <div key={h} className="w-4 flex-shrink-0 text-center">
+            {h % 6 === 0 && <span className="text-xs text-dark/30" style={{fontSize: '8px'}}>{h}h</span>}
+          </div>
+        ))}
+      </div>
+      {days.map((day, di) => (
+        <div key={day} className="flex items-center gap-1 mb-1">
+          <div className="w-8 text-xs text-dark/40 font-semibold text-right pr-1" style={{fontSize: '10px'}}>{day}</div>
+          {hours.map(h => (
+            <div
+              key={h}
+              title={`${day} ${h}:00 — ${grid[di][h]} transactions`}
+              className={`w-4 h-4 rounded-sm flex-shrink-0 transition-all ${
+                getCellColor(grid[di][h], h)
+              } ${isUnusual(h) ? 'ring-1 ring-red-400/50' : ''}`}
+            />
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center gap-4 mt-3">
+        <span className="text-xs text-dark/40">Less</span>
+        {['bg-cream-dark/20','bg-primary/20','bg-primary/50','bg-primary'].map(c => (
+          <div key={c} className={`w-4 h-4 rounded-sm ${c}`} />
+        ))}
+        <span className="text-xs text-dark/40">More</span>
+        <span className="text-xs text-red-400/70 ml-4 flex items-center gap-1">
+          <div className="w-3 h-3 rounded-sm ring-1 ring-red-400/50 bg-cream-dark/20" />
+          Unusual hours (2–5am)
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [dashData, setDashData] = useState(null);
+  const [allTransactions, setAllTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboard();
-    // Auto-refresh every 30 seconds
+    fetchAllTransactions();
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -74,15 +140,30 @@ export default function Dashboard() {
   const fetchDashboard = async () => {
     try {
       const res = await api.get('/dashboard');
-      if (res.data.success) {
-        setDashData(res.data.data);
-      }
+      if (res.data.success) setDashData(res.data.data);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchAllTransactions = async () => {
+    try {
+      const res = await api.get('/transactions?limit=50');
+      if (res.data.success) setAllTransactions(res.data.transactions);
+    } catch {}
+  };
+
+  // WebSocket live threat notifications
+  useWebSocket((event) => {
+    if (event.type === 'THREAT_EVENT' && event.eventStatus === 'BLOCKED') {
+      toast.error(
+        `🚫 BLOCKED: ₹${(event.amount/1000).toFixed(0)}K → ${event.recipient} | Score: ${event.score} | ${event.factor}`,
+        { duration: 6000, id: event.reference }
+      );
+    }
+  });
 
   const handleExportReport = async () => {
     try {
@@ -330,6 +411,22 @@ export default function Dashboard() {
             ))}
           </motion.div>
         )}
+
+        {/* Transaction DNA Heatmap */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="card p-6 mt-6"
+        >
+          <div className="mb-4">
+            <h2 className="text-lg font-black text-dark">Transaction DNA</h2>
+            <p className="text-xs text-dark/40 mt-0.5">
+              Your behavioral pattern — Rakshak AI uses this to detect anomalies instantly
+            </p>
+          </div>
+          <DnaHeatmap transactions={allTransactions} />
+        </motion.div>
       </div>
 
       {/* Demo Panel */}

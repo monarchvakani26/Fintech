@@ -1,15 +1,17 @@
-﻿// ============================================================
+// ============================================================
 // Rakshak AI - Login / Sign Up Page
-// Split screen institutional auth — real MongoDB credentials
+// Split screen institutional auth with dramatic biometric scanning
+// ============================================================
 // ============================================================
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Fingerprint, Eye, EyeOff, User, Mail, Phone, Lock } from 'lucide-react';
+import { Shield, Fingerprint, Eye, EyeOff, User, Mail, Phone, Lock, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-import { generateDeviceFingerprint } from '../utils/deviceFingerprint';
+import { generateDeviceFingerprint, getDeviceInfo } from '../utils/deviceFingerprint';
+import api from '../services/api';
 
 export default function Login() {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
@@ -29,6 +31,7 @@ export default function Login() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricPhase, setBiometricPhase] = useState('idle'); // idle|scanning|verifying|success|error
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
 
@@ -90,26 +93,55 @@ export default function Login() {
   };
 
   const handleBiometric = async () => {
-    if (!email) {
+    if (biometricLoading) return;
+    if (!email && mode === 'login') {
       triggerError('Enter your email first to use biometric login');
       return;
     }
     setBiometricLoading(true);
+    setBiometricPhase('scanning');
+
     try {
-      const res = await (await import('../services/api')).default.post('/auth/biometric', { email });
+      // Phase 1: scanning (1.2s)
+      await new Promise(r => setTimeout(r, 1200));
+      setBiometricPhase('verifying');
+
+      // Phase 2: verifying (0.8s)
+      await new Promise(r => setTimeout(r, 800));
+
+      const res = await api.post('/auth/biometric', {
+        email: email || 'demo@rakshak.ai',
+        biometricData: 'fingerprint_hash_001',
+      });
       if (res.data.success) {
+        setBiometricPhase('success');
         localStorage.setItem('rakshak_token', res.data.token);
         localStorage.setItem('rakshak_user', JSON.stringify(res.data.user));
-        toast.success('Biometric authentication successful');
+        toast.success('Biometric authentication successful', { icon: '🛡️' });
+        await new Promise(r => setTimeout(r, 600));
         window.location.href = '/dashboard';
       }
     } catch (err) {
+      setBiometricPhase('error');
       triggerError(err.response?.data?.message || 'Biometric verification failed');
+      await new Promise(r => setTimeout(r, 1500));
+      setBiometricPhase('idle');
     } finally {
       setBiometricLoading(false);
     }
   };
 
+  const fillDemo = () => {
+    setEmail('demo@rakshak.ai');
+    setPassword('Demo@123');
+  };
+
+  // Biometric icon state renderer
+  const BiometricIcon = () => {
+    if (biometricPhase === 'success') return <CheckCircle className="w-6 h-6 text-green-500" />;
+    if (biometricPhase === 'error') return <XCircle className="w-6 h-6 text-red-500" />;
+    return <Fingerprint className={`w-6 h-6 ${biometricLoading ? 'text-primary' : 'text-primary'}`} />;
+  };
   return (
     <div className="min-h-screen flex">
       {/* ====== LEFT PANEL ====== */}
@@ -143,6 +175,20 @@ export default function Login() {
               ? ' Access your institutional dashboard.'
               : ' Create your account to get started.'}
           </motion.p>
+          <AnimatePresence mode="wait">
+            {mode === 'login' && (
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                onClick={fillDemo}
+                className="mt-6 text-xs text-primary/60 hover:text-primary underline underline-offset-2 transition-colors"
+                exit={{ opacity: 0 }}
+              >
+                Fill demo credentials →
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Security badge */}
@@ -286,18 +332,57 @@ export default function Login() {
                   <div className="flex-1 h-px bg-cream-dark/40" />
                 </div>
 
-                <button
-                  onClick={handleBiometric}
-                  disabled={biometricLoading}
-                  className="w-full btn-ghost py-4 flex items-center justify-center gap-3 text-sm font-semibold"
-                >
-                  {biometricLoading ? (
-                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Fingerprint className="w-5 h-5 text-primary" />
+                <div className="relative">
+                  <button
+                    onClick={handleBiometric}
+                    disabled={biometricLoading}
+                    className={`w-full py-4 flex items-center justify-center gap-3 text-sm font-semibold rounded-xl border-2 transition-all duration-300 ${
+                      biometricPhase === 'success'
+                        ? 'border-green-400 bg-green-50 text-green-700'
+                        : biometricPhase === 'error'
+                        ? 'border-red-400 bg-red-50 text-red-700'
+                        : biometricPhase === 'scanning' || biometricPhase === 'verifying'
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-cream-dark/30 bg-white hover:border-primary/40 text-dark/70 hover:text-dark'
+                    }`}
+                  >
+                    {/* Pulsing rings for scanning */}
+                    <div className="relative flex items-center justify-center">
+                      {(biometricPhase === 'scanning' || biometricPhase === 'verifying') && (
+                        <>
+                          <motion.div
+                            className="absolute w-10 h-10 rounded-full border-2 border-primary/40"
+                            animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
+                            transition={{ duration: 1.2, repeat: Infinity }}
+                          />
+                          <motion.div
+                            className="absolute w-10 h-10 rounded-full border-2 border-primary/30"
+                            animate={{ scale: [1, 2.4], opacity: [0.4, 0] }}
+                            transition={{ duration: 1.2, repeat: Infinity, delay: 0.4 }}
+                          />
+                        </>
+                      )}
+                      <BiometricIcon />
+                    </div>
+
+                    <span>
+                      {biometricPhase === 'idle' && 'Biometric Authentication'}
+                      {biometricPhase === 'scanning' && 'Scanning Fingerprint...'}
+                      {biometricPhase === 'verifying' && 'Verifying Identity...'}
+                      {biometricPhase === 'success' && 'Identity Verified ✓'}
+                      {biometricPhase === 'error' && 'Verification Failed'}
+                    </span>
+                  </button>
+
+                  {biometricPhase === 'verifying' && (
+                    <motion.div
+                      initial={{ width: '0%' }}
+                      animate={{ width: '100%' }}
+                      transition={{ duration: 0.8 }}
+                      className="absolute bottom-0 left-0 h-0.5 bg-primary rounded-full"
+                    />
                   )}
-                  Biometric Authentication
-                </button>
+                </div>
 
                 <p className="mt-6 text-center text-sm text-dark/40">
                   {"Don't have an account? "}

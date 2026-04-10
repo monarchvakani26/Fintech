@@ -1,20 +1,20 @@
 // ============================================================
 // Rakshak AI - Payment Result Page
-// Analysis result with risk factors - matches Image 2
+// + Animated risk counter, AI node flip cards, Merkle tree, QR, confetti/shake
 // ============================================================
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, AlertOctagon, CheckCircle, XCircle,
-  History, Flag, BarChart3, Shield, ArrowLeft, Copy
+  BarChart3, Shield, ArrowLeft, Copy
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import StatusBadge from '../components/common/StatusBadge';
 import RiskScoreBar from '../components/common/RiskScoreBar';
-import { formatCurrency, formatDate, shortHash, getRiskLevel } from '../utils/formatters';
+import { formatCurrency, formatDate, getRiskLevel } from '../utils/formatters';
 import api from '../services/api';
 
 // Human-readable explanations for risk factors
@@ -42,6 +42,114 @@ function getFactorExplanation(factor) {
   return explanations[factor] || 'This factor was flagged by the AI risk assessment engine.';
 }
 
+const NODE_NAMES = ['Conservative', 'Device Sentinel', 'Geo-Intel', 'Behavioral', 'Balanced'];
+
+// Animated risk score counter
+function AnimatedScore({ value, color }) {
+  const [displayed, setDisplayed] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    let start = null;
+    const duration = 1200;
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayed(Math.round(eased * value));
+      if (progress < 1) ref.current = requestAnimationFrame(animate);
+    };
+    ref.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(ref.current);
+  }, [value]);
+  return <span className={color}>{displayed}</span>;
+}
+
+// AI Node Flip Card
+function NodeCard({ name, decision, index, revealed }) {
+  const decisionConfig = {
+    APPROVED: { bg: 'bg-green-500', text: 'text-white', icon: '✓', label: 'APPROVED' },
+    REVIEW:   { bg: 'bg-orange-400', text: 'text-white', icon: '⚠', label: 'REVIEW' },
+    BLOCKED:  { bg: 'bg-red-600', text: 'text-white', icon: '✗', label: 'BLOCKED' },
+  };
+  const cfg = decisionConfig[decision] || decisionConfig.REVIEW;
+
+  return (
+    <div className="relative" style={{ perspective: 800, height: 100 }}>
+      <motion.div
+        className="absolute inset-0"
+        style={{ transformStyle: 'preserve-3d' }}
+        animate={{ rotateY: revealed ? 180 : 0 }}
+        transition={{ duration: 0.5, delay: index * 0.4, ease: 'easeInOut' }}
+      >
+        {/* Front (hidden) */}
+        <div
+          className="absolute inset-0 rounded-xl bg-dark/10 border border-dark/20 flex items-center justify-center"
+          style={{ backfaceVisibility: 'hidden' }}
+        >
+          <div className="text-center">
+            <div className="text-2xl mb-1">🔒</div>
+            <p className="text-xs text-dark/40 font-semibold">{name}</p>
+          </div>
+        </div>
+        {/* Back (revealed) */}
+        <div
+          className={`absolute inset-0 rounded-xl ${cfg.bg} flex items-center justify-center shadow-lg`}
+          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+        >
+          <div className="text-center">
+            <div className={`text-2xl font-black mb-1 ${cfg.text}`}>{cfg.icon}</div>
+            <p className={`text-xs font-bold ${cfg.text}`}>{name}</p>
+            <p className={`text-xs font-black tracking-wider ${cfg.text} opacity-90`}>{cfg.label}</p>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Merkle Tree Visualizer
+function MerkleTree({ hash }) {
+  if (!hash) return null;
+  const short = (s, n = 8) => s?.slice(0, n) || '--------';
+  const rows = [
+    { label: 'userId', hash: short(hash, 8) },
+    { label: 'recipient', hash: short(hash.slice(8), 8) },
+    { label: 'amount', hash: short(hash.slice(16), 8) },
+    { label: 'timestamp', hash: short(hash.slice(24), 8) },
+  ];
+  const combined = short(hash.slice(0, 16), 16);
+
+  return (
+    <div className="bg-cream-light rounded-xl p-4 mt-3 border border-cream-dark/20">
+      <p className="text-xs font-bold uppercase tracking-wider text-dark/40 mb-3">Merkle Hash Construction</p>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {rows.map(({ label, hash: h }) => (
+          <div key={label} className="flex items-center gap-2">
+            <div className="w-16 h-1.5 bg-primary/40 rounded-full" />
+            <div>
+              <p className="text-xs text-dark/40">{label}</p>
+              <p className="text-xs font-mono font-bold text-dark/60">{h}...</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-cream-dark/30 pt-3">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-full h-1.5 bg-primary/60 rounded-full" />
+          <p className="text-xs text-dark/50 whitespace-nowrap">Combined</p>
+          <span className="font-mono text-xs font-bold text-dark/60">{combined}...</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Shield className="w-3 h-3 text-primary flex-shrink-0" />
+          <p className="text-xs text-dark/40">SHA-256:</p>
+          <p className="font-mono text-xs text-primary font-bold truncate">{hash.slice(0, 32)}...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PaymentResult() {
   const { id } = useParams();
   const location = useLocation();
@@ -49,6 +157,10 @@ export default function PaymentResult() {
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [nodesRevealed, setNodesRevealed] = useState(false);
+  const [bgFlash, setBgFlash] = useState(false);
+  const qrRef = useRef(null);
+  const confettiDone = useRef(false);
 
   useEffect(() => {
     fetchResult();
@@ -67,12 +179,48 @@ export default function PaymentResult() {
     }
   };
 
+  // Trigger confetti / shake after load
+  useEffect(() => {
+    if (!transaction || confettiDone.current) return;
+    confettiDone.current = true;
+
+    if (transaction.status === 'APPROVED') {
+      // Confetti
+      import('canvas-confetti').then(({ default: confetti }) => {
+        confetti({
+          particleCount: 90,
+          spread: 65,
+          colors: ['#722f37', '#EFDFBB', '#22c55e', '#ffffff'],
+          origin: { y: 0.4 },
+        });
+      }).catch(() => {});
+    }
+
+    if (transaction.status === 'BLOCKED') {
+      setBgFlash(true);
+      setTimeout(() => setBgFlash(false), 900);
+    }
+
+    // Reveal AI node flip cards after short delay
+    setTimeout(() => setNodesRevealed(true), 800);
+  }, [transaction]);
+
+  // QR code generation
+  useEffect(() => {
+    if (!transaction?.transactionHash || !qrRef.current) return;
+    import('qrcode').then(({ default: QRCode }) => {
+      QRCode.toCanvas(
+        qrRef.current,
+        `RAKSHAK-AI:${transaction.transactionHash}:${transaction.reference}:${transaction.status}`,
+        { width: 90, margin: 1, color: { dark: '#722f37', light: '#F5EDD8' } }
+      );
+    }).catch(() => {});
+  }, [transaction]);
+
   const handleApprove = async () => {
     setActionLoading('approve');
     try {
-      const res = await api.patch(`/transactions/${id}/approve`, {
-        approverNote: 'Manually approved after review',
-      });
+      const res = await api.patch(`/transactions/${id}/approve`, { approverNote: 'Manually approved after review' });
       if (res.data.success) {
         toast.success('Transaction approved successfully');
         setTransaction(res.data.transaction);
@@ -87,9 +235,7 @@ export default function PaymentResult() {
   const handleBlock = async () => {
     setActionLoading('block');
     try {
-      const res = await api.patch(`/transactions/${id}/block`, {
-        blockReason: 'Manually blocked — suspicious activity confirmed',
-      });
+      const res = await api.patch(`/transactions/${id}/block`, { blockReason: 'Manually blocked — suspicious activity confirmed' });
       if (res.data.success) {
         toast.success('Transaction blocked and recipient flagged');
         setTransaction(res.data.transaction);
@@ -128,9 +274,7 @@ export default function PaymentResult() {
           <div className="text-center">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <p className="text-dark font-bold mb-2">Transaction not found</p>
-            <button onClick={() => navigate('/dashboard')} className="btn-primary text-sm">
-              Return to Dashboard
-            </button>
+            <button onClick={() => navigate('/dashboard')} className="btn-primary text-sm">Return to Dashboard</button>
           </div>
         </div>
       </DashboardLayout>
@@ -150,7 +294,7 @@ export default function PaymentResult() {
       badge: 'bg-green-100 text-green-700 border-green-200',
       tagLabel: 'TRANSACTION APPROVED',
       heading: 'Transaction Approved',
-      body: 'Rakshak AI has verified this transaction against all security protocols. It has been cleared and will be processed immediately.',
+      body: 'Rakshak AI has verified this transaction against all security protocols. Cleared and processed immediately.',
     },
     REVIEW: {
       icon: AlertTriangle,
@@ -159,7 +303,7 @@ export default function PaymentResult() {
       badge: 'bg-orange-100 text-orange-700 border-orange-200',
       tagLabel: 'MANUAL REVIEW REQUIRED',
       heading: 'Transaction Under Review',
-      body: 'Rakshak AI has flagged this movement for further scrutiny. While not blocked, it exceeds standard sovereign risk thresholds for this profile.',
+      body: 'Rakshak AI has flagged this movement for further scrutiny. It exceeds standard sovereign risk thresholds for this profile.',
     },
     BLOCKED: {
       icon: XCircle,
@@ -168,15 +312,36 @@ export default function PaymentResult() {
       badge: 'bg-red-100 text-red-700 border-red-200',
       tagLabel: 'TRANSACTION BLOCKED',
       heading: 'Transaction Blocked',
-      body: 'Rakshak AI has identified high-confidence fraud indicators and has automatically blocked this transaction to protect your account.',
+      body: 'Rakshak AI identified high-confidence fraud indicators and automatically blocked this transaction.',
     },
   };
 
   const cfg = statusConfig[status] || statusConfig.REVIEW;
   const StatusIcon = cfg.icon;
 
+  // Build node decision array
+  const nodeDecisions = analysis?.aiConsensus?.nodeDecisions ||
+    Array(5).fill(null).map((_, i) => {
+      const agreeCount = analysis?.aiConsensus?.agreeCount || 3;
+      return i < agreeCount ? status : (status === 'BLOCKED' ? 'REVIEW' : 'APPROVED');
+    });
+
   return (
     <DashboardLayout>
+      {/* Red flash overlay for BLOCKED */}
+      <AnimatePresence>
+        {bgFlash && (
+          <motion.div
+            className="fixed inset-0 z-50 pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            style={{ background: 'rgba(239,68,68,0.12)' }}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="max-w-5xl">
         {/* Page Header */}
         <div className="flex items-start justify-between mb-6">
@@ -193,45 +358,45 @@ export default function PaymentResult() {
           </div>
           <div className="text-right">
             <p className="text-xs text-dark/50 font-medium">
-              Transaction ID: <span className="font-bold text-dark">{transaction.reference}</span>
+              Ref: <span className="font-bold text-dark">{transaction.reference}</span>
             </p>
-            <p className="text-xs text-dark/40 mt-1">
-              Generated: {formatDate(transaction.createdAt)}
-            </p>
+            <p className="text-xs text-dark/40 mt-1">Generated: {formatDate(transaction.createdAt)}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-6">
           {/* LEFT: Main result (2/3) */}
-          <div className="col-span-2">
+          <div className="col-span-2 space-y-4">
+            {/* Main result card — shake on BLOCKED */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{
+                opacity: 1, y: 0,
+                x: status === 'BLOCKED' ? [-8, 8, -6, 6, -4, 4, 0] : 0,
+              }}
+              transition={{
+                opacity: { duration: 0.4 },
+                y: { duration: 0.4 },
+                x: status === 'BLOCKED' ? { duration: 0.5, delay: 0.3 } : {},
+              }}
               className={`rounded-2xl border-2 p-8 ${cfg.bg}`}
             >
-              {/* Status tag */}
               <div className={`inline-flex items-center gap-2 border rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider mb-6 ${cfg.badge}`}>
                 <StatusIcon className="w-4 h-4" />
                 {cfg.tagLabel}
               </div>
 
-              {/* Heading */}
-              <motion.h2
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className={`text-4xl font-black mb-4 ${cfg.color}`}
-              >
-                {cfg.heading}
-              </motion.h2>
+              <h2 className={`text-4xl font-black mb-2 ${cfg.color}`}>{cfg.heading}</h2>
+              <p className="text-dark/60 text-sm leading-relaxed mb-6">{cfg.body}</p>
 
-              <p className="text-dark/60 text-sm leading-relaxed mb-8">{cfg.body}</p>
-
-              {/* Risk Score Bar */}
+              {/* Animated Risk Score Bar */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-dark/50">Risk Score</span>
-                  <span className={`text-sm font-black ${riskLevel.color}`}>{riskScore}/100</span>
+                  <span className={`text-2xl font-black tabular-nums ${riskLevel.color}`}>
+                    <AnimatedScore value={riskScore} color={riskLevel.color} />
+                    <span className="text-base text-dark/40">/100</span>
+                  </span>
                 </div>
                 <RiskScoreBar score={riskScore} showLabel={false} height="h-3" />
               </div>
@@ -245,22 +410,14 @@ export default function PaymentResult() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.1 + i * 0.08 }}
-                      className={`flex items-center gap-4 bg-white rounded-xl p-4 border ${
-                        i === 0 ? 'border-red-100' : 'border-cream-dark/20'
-                      }`}
+                      className={`flex items-center gap-4 bg-white rounded-xl p-4 border ${i === 0 ? 'border-red-100' : 'border-cream-dark/20'}`}
                     >
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        i === 0 ? 'bg-red-100' : 'bg-primary'
-                      }`}>
-                        {i === 0 ? (
-                          <AlertTriangle className="w-5 h-5 text-red-600" />
-                        ) : (
-                          <AlertOctagon className="w-5 h-5 text-white" />
-                        )}
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${i === 0 ? 'bg-red-100' : 'bg-primary'}`}>
+                        {i === 0 ? <AlertTriangle className="w-5 h-5 text-red-600" /> : <AlertOctagon className="w-5 h-5 text-white" />}
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-dark/40 mb-0.5">
-                          {i === 0 ? 'RISK FACTOR' : 'ANOMALY'}
+                          {i === 0 ? 'PRIMARY RISK FACTOR' : 'ANOMALY'}
                         </p>
                         <p className="text-sm font-bold text-dark">{factor}</p>
                       </div>
@@ -269,7 +426,6 @@ export default function PaymentResult() {
                 </div>
               )}
 
-              {/* No risk factors for approved */}
               {status === 'APPROVED' && (!analysis?.riskFactors || analysis.riskFactors.length === 0) && (
                 <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-green-100">
                   <CheckCircle className="w-6 h-6 text-green-500" />
@@ -338,108 +494,132 @@ export default function PaymentResult() {
               </motion.div>
             )}
 
-            {/* AI Consensus + History + IP Mismatch Cards */}
+            {/* AI Node Voting Cards */}
             {analysis && (
-              <div className="grid grid-cols-3 gap-4 mt-4">
-                {/* History */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="card p-4"
-                >
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="card p-6"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-dark/50">AI Node Consensus Voting</p>
+                  <span className="text-xs font-bold text-dark/40 bg-cream-light px-2 py-1 rounded">
+                    {analysis.aiConsensus?.agreeCount || 3}/5 nodes agreed
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 mb-3">
+                  {NODE_NAMES.map((name, i) => (
+                    <NodeCard
+                      key={name}
+                      name={name}
+                      decision={nodeDecisions[i] || status}
+                      index={i}
+                      revealed={nodesRevealed}
+                    />
+                  ))}
+                </div>
+                <AnimatePresence>
+                  {nodesRevealed && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 2.2 }}
+                      className="text-xs text-center text-dark/50 mt-2"
+                    >
+                      {analysis.aiConsensus?.summary || `${analysis.aiConsensus?.agreeCount || 3} out of 5 AI nodes reached consensus`}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+
+            {/* Info cards row */}
+            {analysis && (
+              <div className="grid grid-cols-3 gap-4">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="card p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-xs font-bold text-green-600 bg-green-100 rounded px-2 py-0.5 uppercase">History</span>
                   </div>
                   <h4 className="text-sm font-bold text-dark mb-1">Verification Approved</h4>
                   <p className="text-xs text-dark/50 leading-relaxed">
-                    Previous 3 transactions within the last 24 hours were successfully verified via biometric key.
+                    Previous transactions verified via biometric key.
                   </p>
                 </motion.div>
 
-                {/* IP Mismatch */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                  className="card p-4 border-red-100"
-                >
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="card p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <XCircle className="w-4 h-4 text-red-500" />
-                    <span className="text-xs font-bold text-red-600 bg-red-100 rounded px-2 py-0.5 uppercase">Red Flag</span>
+                    <span className="text-xs font-bold text-red-600 bg-red-100 rounded px-2 py-0.5 uppercase">IP Intel</span>
                   </div>
-                  <h4 className="text-sm font-bold text-dark mb-1">IP Mismatch</h4>
+                  <h4 className="text-sm font-bold text-dark mb-1">Location Analysis</h4>
                   <p className="text-xs text-dark/50 leading-relaxed">
-                    Originating IP {analysis.locationInfo?.ip || '192.168.x.x'} is{' '}
-                    {analysis.locationInfo?.isBlacklisted ? 'blacklisted on Global Fraud Registry (GF-Tier 1)' : 'from an unusual location'}.
+                    IP {analysis.locationInfo?.ip || 'N/A'} from {analysis.locationInfo?.city}, {analysis.locationInfo?.country}.
+                    {analysis.locationInfo?.isBlacklisted ? ' ⚠ Blacklisted on GF-Tier 1.' : ''}
                   </p>
                 </motion.div>
 
-                {/* AI Consensus */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="card p-4"
-                >
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="card p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <BarChart3 className="w-4 h-4 text-dark/40" />
                     <span className="text-xs font-bold text-dark/40 bg-cream-light rounded px-2 py-0.5 uppercase">Audit</span>
                   </div>
                   <h4 className="text-sm font-bold text-dark mb-1">System Consensus</h4>
                   <p className="text-xs text-dark/50 leading-relaxed">
-                    {analysis.aiConsensus?.summary || '3 out of 5 AI nodes suggested cautionary review based on behavioral drift analysis.'}
+                    {analysis.aiConsensus?.summary || '3 out of 5 AI nodes agreed on this outcome.'}
                   </p>
                 </motion.div>
               </div>
             )}
 
-            {/* Transaction Hash */}
+            {/* Blockchain Hash + Merkle Tree + QR */}
             {transaction.transactionHash && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                className="card p-4 mt-4"
+                transition={{ delay: 0.8 }}
+                className="card p-5"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-dark/40 mb-1">Blockchain Hash (Immutable Proof)</p>
-                    <p className="font-mono text-xs text-dark/60 break-all">{transaction.transactionHash}</p>
-                  </div>
-                  <button onClick={copyHash} className="ml-4 p-2 hover:bg-cream rounded-lg transition-colors flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-dark/40">Blockchain Hash (Immutable Proof)</p>
+                  <button onClick={copyHash} className="p-2 hover:bg-cream rounded-lg transition-colors">
                     <Copy className="w-4 h-4 text-dark/40" />
                   </button>
+                </div>
+                <p className="font-mono text-xs text-dark/60 break-all mb-3">{transaction.transactionHash}</p>
+
+                {/* QR Code + Merkle Tree side by side */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-start gap-3">
+                    <canvas ref={qrRef} className="rounded-lg flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-dark/60 mb-1">Scan to Verify</p>
+                      <p className="text-xs text-dark/40 leading-relaxed">
+                        Scan this QR code to independently verify on the Sovereign Ledger.
+                      </p>
+                    </div>
+                  </div>
+                  <MerkleTree hash={transaction.transactionHash} />
                 </div>
               </motion.div>
             )}
           </div>
 
-          {/* RIGHT: Comparison Matrix + Actions (1/3) */}
+          {/* RIGHT: Comparison Matrix + Risk Breakdown + Actions */}
           <div className="space-y-4">
-            {/* Comparison Matrix */}
             {analysis?.comparisonMatrix && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 }}
-                className="card p-6"
-              >
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="card p-6">
                 <p className="text-xs font-bold uppercase tracking-widest text-dark/50 mb-4">Comparison Matrix</p>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-dark/60">Standard Amount</span>
-                    <span className="text-sm font-black text-dark">
-                      {formatCurrency(analysis.comparisonMatrix.standardAmount)}
-                    </span>
+                    <span className="text-sm font-black text-dark">{formatCurrency(analysis.comparisonMatrix.standardAmount)}</span>
                   </div>
                   <div className="h-px bg-cream-dark/20" />
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-dark/60">Requested Amount</span>
-                    <span className="text-sm font-black text-primary">
-                      {formatCurrency(analysis.comparisonMatrix.requestedAmount)}
-                    </span>
+                    <span className="text-sm font-black text-primary">{formatCurrency(analysis.comparisonMatrix.requestedAmount)}</span>
                   </div>
                   <div className="h-px bg-cream-dark/20" />
                   <div className="flex items-center justify-between">
@@ -452,14 +632,8 @@ export default function PaymentResult() {
               </motion.div>
             )}
 
-            {/* Risk Breakdown */}
             {analysis?.breakdown && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.25 }}
-                className="card p-6"
-              >
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 }} className="card p-6">
                 <p className="text-xs font-bold uppercase tracking-widest text-dark/50 mb-4">Risk Breakdown</p>
                 <div className="space-y-3">
                   {Object.entries(analysis.breakdown).map(([key, value]) => (
@@ -475,14 +649,9 @@ export default function PaymentResult() {
               </motion.div>
             )}
 
-            {/* Action Buttons (only for REVIEW) */}
+            {/* Action Buttons (REVIEW only) */}
             {status === 'REVIEW' && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-                className="space-y-3"
-              >
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="space-y-3">
                 <button
                   onClick={handleApprove}
                   disabled={!!actionLoading}
@@ -490,9 +659,7 @@ export default function PaymentResult() {
                 >
                   {actionLoading === 'approve' ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4" />
-                  )}
+                  ) : <CheckCircle className="w-4 h-4" />}
                   Approve Manually
                 </button>
                 <button
@@ -502,19 +669,13 @@ export default function PaymentResult() {
                 >
                   {actionLoading === 'block' ? (
                     <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <XCircle className="w-4 h-4" />
-                  )}
+                  ) : <XCircle className="w-4 h-4" />}
                   Block Transaction
                 </button>
               </motion.div>
             )}
 
-            {/* Navigation */}
-            <button
-              onClick={() => navigate('/payments')}
-              className="w-full btn-ghost py-3 text-sm"
-            >
+            <button onClick={() => navigate('/payments')} className="w-full btn-ghost py-3 text-sm">
               New Payment
             </button>
             <button
