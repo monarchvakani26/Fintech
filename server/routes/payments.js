@@ -17,18 +17,24 @@ router.post('/initiate', authMiddleware, async (req, res) => {
   try {
     const { recipientVPA, amount, note, deviceFingerprint, location } = req.body;
     const user = req.user;
+    const userId = user.user_id || user.id; // support both MongoDB and seed users
 
     // Validation
     if (!recipientVPA) return res.status(400).json({ success: false, message: 'Recipient VPA is required' });
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount is required' });
-    if (amount > user.balance) return res.status(400).json({ success: false, message: 'Insufficient balance' });
+
+    // Check balance from store (seed user) or use a large default for MongoDB users
+    const storeUser = store.findUserById(userId);
+    if (storeUser && amount > storeUser.balance) {
+      return res.status(400).json({ success: false, message: 'Insufficient balance' });
+    }
 
     // Create pending transaction
     const txnId = uuidv4();
     const reference = store.genRef();
     const transaction = {
       id: txnId,
-      userId: user.id,
+      userId,
       reference,
       recipient: {
         vpa: recipientVPA,
@@ -44,8 +50,8 @@ router.post('/initiate', authMiddleware, async (req, res) => {
       riskAnalysis: null,
       transactionHash: null,
       metadata: {
-        userTrustScoreAtTime: user.trustScore,
-        userBalanceAtTime: user.balance,
+        userTrustScoreAtTime: storeUser?.trustScore || user.risk?.trust_score || 70,
+        userBalanceAtTime: storeUser?.balance || 500000,
         sessionId: uuidv4(),
         transactionHour: new Date().getHours(),
       },
@@ -73,17 +79,18 @@ router.post('/analyze/:transactionId', authMiddleware, async (req, res) => {
   try {
     const { transactionId } = req.params;
     const user = req.user;
+    const userId = user.user_id || user.id; // always use custom string ID
     const ip = req.ip || req.headers['x-forwarded-for'] || '103.21.58.1';
 
     const transaction = store.findTransactionById(transactionId);
     if (!transaction) return res.status(404).json({ success: false, message: 'Transaction not found' });
-    if (transaction.userId !== user.id) return res.status(403).json({ success: false, message: 'Unauthorized' });
+    if (transaction.userId !== userId) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
     const { deviceFingerprint, userAgent, platform, screenResolution, timezone, country, city } = req.body;
 
     // Run fraud analysis
     const analysis = await analyzeFraud({
-      userId: user.id,
+      userId,
       amount: transaction.amount,
       recipientVPA: transaction.recipient.vpa,
       recipientName: transaction.recipient.name,
@@ -99,7 +106,7 @@ router.post('/analyze/:transactionId', authMiddleware, async (req, res) => {
 
     // Generate blockchain hash
     const transactionHash = store.generateTxHash({
-      userId: user.id,
+      userId,
       recipientVPA: transaction.recipient.vpa,
       amount: transaction.amount,
       timestamp: transaction.createdAt.toISOString(),
@@ -120,7 +127,7 @@ router.post('/analyze/:transactionId', authMiddleware, async (req, res) => {
     const blockchainBlock = blockchain.addBlock({
       transactionId: transactionId,
       amount: transaction.amount,
-      sender: user.id,
+      sender: userId,
       receiver: transaction.recipient.vpa,
       status: analysis.decision,
       riskScore: analysis.riskScore,
@@ -129,30 +136,34 @@ router.post('/analyze/:transactionId', authMiddleware, async (req, res) => {
     });
 
     // Update trust score
-    updateTrustScoreAfterTransaction(user.id, analysis.decision);
+    updateTrustScoreAfterTransaction(userId, analysis.decision);
 
-    // Update user balance if approved
+    // Update user balance if approved (only affects in-memory seed users)
     if (analysis.decision === 'APPROVED') {
-      const updatedUser = store.findUserById(user.id);
-      store.updateUser(user.id, { balance: updatedUser.balance - transaction.amount });
+      const updatedUser = store.findUserById(userId);
+      if (updatedUser && updatedUser.balance !== undefined) {
+        store.updateUser(userId, { balance: updatedUser.balance - transaction.amount });
+      }
     }
 
-    // Update user stats
-    const currentUser = store.findUserById(user.id);
-    const stats = currentUser.transactionStats;
-    const newTotal = stats.totalCount + 1;
-    const newAvg = ((stats.averageAmount * stats.totalCount) + transaction.amount) / newTotal;
-    store.updateUser(user.id, {
-      transactionStats: {
-        ...stats,
-        totalCount: newTotal,
-        approvedCount: stats.approvedCount + (analysis.decision === 'APPROVED' ? 1 : 0),
-        reviewCount: stats.reviewCount + (analysis.decision === 'REVIEW' ? 1 : 0),
-        blockedCount: stats.blockedCount + (analysis.decision === 'BLOCKED' ? 1 : 0),
-        averageAmount: Math.round(newAvg),
-        totalVolume: stats.totalVolume + transaction.amount,
-      },
-    });
+    // Update user stats (only affects in-memory seed users)
+    const currentUser = store.findUserById(userId);
+    if (currentUser && currentUser.transactionStats) {
+      const stats = currentUser.transactionStats;
+      const newTotal = stats.totalCount + 1;
+      const newAvg = ((stats.averageAmount * stats.totalCount) + transaction.amount) / newTotal;
+      store.updateUser(userId, {
+        transactionStats: {
+          ...stats,
+          totalCount: newTotal,
+          approvedCount: stats.approvedCount + (analysis.decision === 'APPROVED' ? 1 : 0),
+          reviewCount: stats.reviewCount + (analysis.decision === 'REVIEW' ? 1 : 0),
+          blockedCount: stats.blockedCount + (analysis.decision === 'BLOCKED' ? 1 : 0),
+          averageAmount: Math.round(newAvg),
+          totalVolume: stats.totalVolume + transaction.amount,
+        },
+      });
+    }
 
     res.json({
       success: true,

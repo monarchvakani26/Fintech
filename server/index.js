@@ -164,6 +164,6 @@ connectDB().then(() => {
     console.log('╚════════════════════════════════════════╝\n');
   });
 });
-});
+
 
 module.exports = { app, server, broadcast };
