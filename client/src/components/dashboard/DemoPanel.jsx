@@ -48,7 +48,7 @@ export default function DemoPanel() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div className="fixed bottom-4 right-4 z-50" style={{ maxWidth: '260px' }}>
       <AnimatePresence>
         {isOpen && (
           <motion.div
