@@ -1,18 +1,18 @@
-// ============================================================
-// Rakshak AI — Data Collection Page
-// Card-based layout matching existing cream/primary UI.
-// Each section is an independent card. Biometric toggle
-// triggers face capture inline.
+﻿// ============================================================
+// Rakshak AI â€” Data Collection Page
+// Professional fintech card-based layout with real-time sync.
+// Each section is an independent card matching cream/primary UI.
 // ============================================================
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, CreditCard, MapPin, Smartphone, Activity, ScanFace,
   Send, Shield, Loader, CheckCircle, Wifi, WifiOff,
   Building2, Wallet, Phone, Mail, RefreshCw,
   Fingerprint, Monitor, Globe, Zap, Clock, Camera, X,
-  AlertTriangle, Eye, ChevronDown, ChevronUp,
+  AlertTriangle, ChevronDown, ChevronUp, Lock,
+  Layers, Database,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -20,7 +20,7 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../components/layout/DashboardLayout';
 
-// ─── Card wrapper matching existing UI ──────────────────────
+// â”€â”€â”€ Card wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SectionCard({ title, subtitle, icon: Icon, children, onSave, saving, saved, collapsible = false, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -30,20 +30,19 @@ function SectionCard({ title, subtitle, icon: Icon, children, onSave, saving, sa
       animate={{ opacity: 1, y: 0 }}
       className="card overflow-hidden"
     >
-      {/* Header */}
       <div
-        className={`flex items-center gap-3 px-6 py-4 border-b border-cream-dark/20 ${collapsible ? 'cursor-pointer hover:bg-cream-light/50' : ''}`}
+        className={`flex items-center gap-3 px-6 py-4 border-b border-cream-dark/20 ${collapsible ? 'cursor-pointer hover:bg-cream-light/50 select-none' : ''}`}
         onClick={collapsible ? () => setOpen(!open) : undefined}
       >
         <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
           <Icon className="w-4.5 h-4.5 text-primary" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold text-dark uppercase tracking-wider">{title}</h3>
           {subtitle && <p className="text-xs text-dark/40 mt-0.5">{subtitle}</p>}
         </div>
         {saved && (
-          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 border border-green-200 text-green-600 text-[10px] font-bold">
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 border border-green-200 text-green-600 text-[10px] font-bold flex-shrink-0">
             <CheckCircle className="w-3 h-3" /> Synced
           </span>
         )}
@@ -52,18 +51,16 @@ function SectionCard({ title, subtitle, icon: Icon, children, onSave, saving, sa
             type="button"
             onClick={(e) => { e.stopPropagation(); onSave(); }}
             disabled={saving}
-            className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5"
+            className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5 flex-shrink-0"
           >
             {saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             {saving ? 'Saving...' : 'Save'}
           </button>
         )}
         {collapsible && (
-          open ? <ChevronUp className="w-4 h-4 text-dark/30" /> : <ChevronDown className="w-4 h-4 text-dark/30" />
+          open ? <ChevronUp className="w-4 h-4 text-dark/30 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-dark/30 flex-shrink-0" />
         )}
       </div>
-
-      {/* Body */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -73,9 +70,7 @@ function SectionCard({ title, subtitle, icon: Icon, children, onSave, saving, sa
             transition={{ duration: 0.3 }}
             className="overflow-hidden"
           >
-            <div className="p-6">
-              {children}
-            </div>
+            <div className="p-6">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -83,10 +78,10 @@ function SectionCard({ title, subtitle, icon: Icon, children, onSave, saving, sa
   );
 }
 
-// ─── Inline text field ──────────────────────────────────────
-function Field({ label, icon: Icon, value, onChange, type = 'text', placeholder, required, disabled, error, ...props }) {
+// â”€â”€â”€ Field component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function Field({ label, icon: Icon, value, onChange, type = 'text', placeholder, required, disabled, error, className = '', ...props }) {
   return (
-    <div>
+    <div className={className}>
       <label className="flex items-center gap-1.5 text-xs font-semibold text-dark/60 mb-1.5">
         {Icon && <Icon className="w-3.5 h-3.5" />}
         {label}
@@ -106,11 +101,37 @@ function Field({ label, icon: Icon, value, onChange, type = 'text', placeholder,
   );
 }
 
-// ─── Card type selector ─────────────────────────────────────
+// â”€â”€â”€ Profile completeness ring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function CompletenessRing({ percent }) {
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percent / 100) * circumference;
+  const color = percent >= 80 ? '#22c55e' : percent >= 50 ? '#f59e0b' : '#ef4444';
+
+  return (
+    <div className="relative w-24 h-24 flex-shrink-0">
+      <svg viewBox="0 0 96 96" className="w-full h-full -rotate-90">
+        <circle cx="48" cy="48" r={radius} fill="none" stroke="currentColor" strokeWidth="6" className="text-cream-dark/20" />
+        <motion.circle
+          cx="48" cy="48" r={radius} fill="none" stroke={color} strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-xl font-black text-dark tabular-nums">{percent}%</span>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CARD_TYPES = ['VISA', 'MASTERCARD', 'AMEX', 'RUPAY', 'DISCOVER'];
 const BANKS = ['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank', 'Punjab National Bank', 'IndusInd Bank', 'Yes Bank', 'Other'];
 
-// ─── Device fingerprint generator ───────────────────────────
 function generateFingerprint() {
   const components = [navigator.userAgent, navigator.platform, navigator.language, screen.width + 'x' + screen.height, screen.colorDepth, new Date().getTimezoneOffset(), navigator.hardwareConcurrency].join('|');
   let hash = 0;
@@ -139,18 +160,18 @@ function detectOS() {
   return navigator.platform || 'Unknown';
 }
 
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 export default function DataCollection() {
   const { user, refreshUser } = useAuth();
-  const { connected } = useSocket();
+  const { connected, subscribe } = useSocket();
 
   const [saving, setSaving] = useState({});
   const [saved, setSaved] = useState({});
 
-  // ── Form states ─────────────────────────────────────────────
+  // â”€â”€ Form states â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [basic, setBasic] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' });
   const [financial, setFinancial] = useState({
     card_last4: user?.financial?.card_last4 || '',
@@ -168,7 +189,7 @@ export default function DataCollection() {
   const [gpsLoading, setGpsLoading] = useState(false);
 
   // Auto-capture device
-  const [device] = useState(() => ({
+  const device = useMemo(() => ({
     userAgent: navigator.userAgent,
     platform: detectOS(),
     browser: detectBrowser(),
@@ -176,7 +197,7 @@ export default function DataCollection() {
     fingerprint: generateFingerprint(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     cores: navigator.hardwareConcurrency || 'N/A',
-  }));
+  }), []);
 
   // Behavior tracking
   const [typingSpeed, setTypingSpeed] = useState(0);
@@ -194,7 +215,27 @@ export default function DataCollection() {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
-  // ── Session Duration Timer ──────────────────────────────────
+  // Real-time update counter
+  const [liveUpdates, setLiveUpdates] = useState(0);
+
+  // â”€â”€ Profile completeness â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const completeness = useMemo(() => {
+    let filled = 0, total = 11;
+    if (basic.name) filled++;
+    if (basic.email) filled++;
+    if (basic.phone) filled++;
+    if (financial.card_last4?.length === 4) filled++;
+    if (financial.card_type) filled++;
+    if (financial.bank_name) filled++;
+    if (financial.avg_balance > 0) filled++;
+    if (location.lat) filled++;
+    if (saved.device || user?.devices?.trusted_devices?.length > 0) filled++;
+    if (typingSpeed > 0 || user?.behavioral?.typing_speed_avg > 0) filled++;
+    if (faceData || user?.biometric?.enabled) filled++;
+    return Math.round((filled / total) * 100);
+  }, [basic, financial, location, saved, typingSpeed, faceData, user]);
+
+  // â”€â”€ Session Duration Timer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const interval = setInterval(() => {
       setSessionDuration(Math.floor((Date.now() - sessionStart) / 1000));
@@ -202,7 +243,17 @@ export default function DataCollection() {
     return () => clearInterval(interval);
   }, [sessionStart]);
 
-  // ── GPS auto-fetch ──────────────────────────────────────────
+  // â”€â”€ Socket.IO real-time listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  useEffect(() => {
+    const unsub = subscribe('user-data-updated', (payload) => {
+      if (payload.userId === user?.user_id) {
+        setLiveUpdates(prev => prev + 1);
+      }
+    });
+    return unsub;
+  }, [subscribe, user?.user_id]);
+
+  // â”€â”€ GPS auto-fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchGPS = useCallback(async () => {
     if (!navigator.geolocation) return;
     setGpsLoading(true);
@@ -226,7 +277,7 @@ export default function DataCollection() {
 
   useEffect(() => { if (!location.lat) fetchGPS(); }, []); // eslint-disable-line
 
-  // ── Typing speed tracker ────────────────────────────────────
+  // â”€â”€ Typing speed tracker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleTypingTrack = useCallback(() => {
     const now = Date.now();
     keystrokeTimes.current = [...keystrokeTimes.current.slice(-19), now];
@@ -240,7 +291,7 @@ export default function DataCollection() {
     }
   }, []);
 
-  // ── Save helper ─────────────────────────────────────────────
+  // â”€â”€ Save helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const saveSection = useCallback(async (section) => {
     if (!user) return;
     setSaving(prev => ({ ...prev, [section]: true }));
@@ -265,7 +316,11 @@ export default function DataCollection() {
           break;
         case 'behavior':
           endpoint = '/user/update-behavior';
-          payload = { typing_speed_avg: typingSpeed, session_duration_avg: sessionDuration, active_hours: { start: new Date().getHours(), end: Math.min(23, new Date().getHours() + 2) } };
+          payload = {
+            typing_speed_avg: typingSpeed,
+            session_duration_avg: sessionDuration,
+            active_hours: { start: new Date().getHours(), end: Math.min(23, new Date().getHours() + 2) },
+          };
           break;
         case 'biometric':
           if (!faceData?.face_embedding?.length) { toast.error('Please capture your face first'); setSaving(prev => ({ ...prev, [section]: false })); return; }
@@ -277,7 +332,9 @@ export default function DataCollection() {
       const res = await api.post(endpoint, payload);
       if (res.data.success) {
         setSaved(prev => ({ ...prev, [section]: true }));
-        toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} saved successfully`);
+        toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} saved & synced to dashboard`, {
+          style: { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' },
+        });
         refreshUser();
       }
     } catch (err) {
@@ -287,17 +344,23 @@ export default function DataCollection() {
     }
   }, [user, basic, financial, location, device, typingSpeed, sessionDuration, faceData, refreshUser]);
 
-  // ── Biometric toggle handler ────────────────────────────────
+  // â”€â”€ Biometric handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  }, []);
+
   const handleBiometricToggle = useCallback(async (enabled) => {
     setBiometricEnabled(enabled);
     if (enabled && !faceData) {
-      // Start camera immediately
       try {
         setFaceError(null);
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
         streamRef.current = stream;
         setCameraActive(true);
-        // Wait for video ref to be available
         setTimeout(() => {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
@@ -312,15 +375,7 @@ export default function DataCollection() {
       stopCamera();
       setFaceData(null);
     }
-  }, [faceData]);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    setCameraActive(false);
-  }, []);
+  }, [faceData, stopCamera]);
 
   const captureFace = useCallback(async () => {
     if (!videoRef.current) return;
@@ -334,18 +389,15 @@ export default function DataCollection() {
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
         faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
       ]);
-
       const detection = await faceapi
         .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
-
       if (!detection) {
         setFaceError('No face detected. Please face the camera directly.');
         setFaceLoading(false);
         return;
       }
-
       const embedding = Array.from(detection.descriptor);
       setFaceData({
         face_embedding: embedding,
@@ -362,21 +414,25 @@ export default function DataCollection() {
     }
   }, [stopCamera]);
 
-  // Cleanup camera on unmount
   useEffect(() => () => { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); }, []);
 
   const formatDuration = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const speedLabel = typingSpeed < 3 ? 'Slow' : typingSpeed < 6 ? 'Average' : typingSpeed < 9 ? 'Fast' : 'Very Fast';
+  const speedColor = typingSpeed < 3 ? 'text-red-500' : typingSpeed < 6 ? 'text-amber-500' : typingSpeed < 9 ? 'text-green-500' : 'text-emerald-500';
 
   return (
     <DashboardLayout>
       <div className="max-w-5xl">
-        {/* Page Header */}
+        {/* â•â•â• PAGE HEADER â•â•â• */}
         <div className="flex items-start justify-between mb-8">
           <div>
             <p className="text-dark/50 text-xs font-semibold uppercase tracking-widest mb-1">Profile Setup</p>
             <h1 className="text-4xl font-black text-dark">Data Collection</h1>
           </div>
           <div className="flex items-center gap-3">
+            {liveUpdates > 0 && (
+              <span className="text-xs text-dark/40 font-mono tabular-nums">{liveUpdates} live syncs</span>
+            )}
             {connected ? (
               <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 text-green-600 text-xs font-bold">
                 <Wifi className="w-3.5 h-3.5" /> Live Sync
@@ -389,20 +445,123 @@ export default function DataCollection() {
           </div>
         </div>
 
-        <div className="space-y-6">
+        {/* â•â•â• PROFILE COMPLETENESS BANNER â•â•â• */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card p-6 mb-6"
+        >
+          <div className="flex items-center gap-6">
+            <CompletenessRing percent={completeness} />
+            <div className="flex-1">
+              <h3 className="text-lg font-black text-dark mb-1">Profile Completeness</h3>
+              <p className="text-sm text-dark/50 mb-3">
+                {completeness < 50
+                  ? 'Complete your profile to improve your trust score and unlock secure transactions.'
+                  : completeness < 80
+                  ? 'Good progress! A few more sections will maximize your trust score.'
+                  : 'Excellent! Your profile is comprehensive. Rakshak AI can protect you fully.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Identity', done: !!(basic.name && basic.email) },
+                  { label: 'Financial', done: !!(financial.card_last4 && financial.bank_name) },
+                  { label: 'Location', done: !!location.lat },
+                  { label: 'Device', done: !!(saved.device || user?.devices?.trusted_devices?.length > 0) },
+                  { label: 'Behavior', done: typingSpeed > 0 || !!user?.behavioral?.typing_speed_avg },
+                  { label: 'Biometric', done: !!(faceData || user?.biometric?.enabled) },
+                ].map(s => (
+                  <span key={s.label} className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                    s.done
+                      ? 'bg-green-50 text-green-600 border-green-200'
+                      : 'bg-cream-light text-dark/30 border-cream-dark/20'
+                  }`}>
+                    {s.done && <CheckCircle className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                    {s.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
 
-          {/* ═══ BASIC INFO ═══ */}
-          <SectionCard title="Basic Information" subtitle="Personal identity details" icon={User} onSave={() => saveSection('basic')} saving={saving.basic} saved={saved.basic}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* â•â•â• TWO-COLUMN LAYOUT: IDENTITY + DEVICE â•â•â• */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+          <SectionCard title="Identity" subtitle="Personal details" icon={User}
+            onSave={() => saveSection('basic')} saving={saving.basic} saved={saved.basic}
+          >
+            <div className="space-y-4">
               <Field label="Full Name" icon={User} value={basic.name} onChange={(v) => setBasic(p => ({ ...p, name: v }))} placeholder="Arjun Sharma" required />
               <Field label="Email Address" icon={Mail} value={basic.email} onChange={(v) => setBasic(p => ({ ...p, email: v }))} placeholder="arjun@rakshak.ai" type="email" required />
               <Field label="Phone Number" icon={Phone} value={basic.phone} onChange={(v) => setBasic(p => ({ ...p, phone: v }))} placeholder="+91 98765 43210" type="tel" />
             </div>
           </SectionCard>
 
-          {/* ═══ FINANCIAL DETAILS ═══ */}
-          <SectionCard title="Financial Details" subtitle="Payment & banking information" icon={CreditCard} onSave={() => saveSection('financial')} saving={saving.financial} saved={saved.financial}>
+          <SectionCard title="Device Intelligence" subtitle="Auto-captured fingerprint" icon={Smartphone}
+            onSave={() => saveSection('device')} saving={saving.device} saved={saved.device}
+          >
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: Monitor, label: 'Platform', value: device.platform },
+                  { icon: Globe, label: 'Browser', value: device.browser },
+                  { icon: Monitor, label: 'Screen', value: device.screenResolution },
+                  { icon: Clock, label: 'Timezone', value: device.timezone },
+                ].map(item => (
+                  <div key={item.label} className="card-cream p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <item.icon className="w-3 h-3 text-primary/60" />
+                      <span className="text-[10px] uppercase tracking-wider text-dark/40 font-bold">{item.label}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-dark truncate">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="p-3 card-cream">
+                <div className="flex items-center gap-2 mb-2">
+                  <Fingerprint className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold text-dark">Fingerprint</span>
+                  <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200 font-bold">SHA-256</span>
+                </div>
+                <p className="text-[10px] font-mono text-dark/40 break-all leading-relaxed bg-white p-2 rounded-lg border border-cream-dark/20">{device.fingerprint}</p>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* â•â•â• ADD PAYMENT CARD â€” FULL WIDTH â•â•â• */}
+        <div className="mb-6">
+          <SectionCard title="Add a Payment Card" subtitle="Link your card for secure transactions" icon={CreditCard}
+            onSave={() => saveSection('financial')} saving={saving.financial} saved={saved.financial}
+          >
+            <div className="space-y-5">
+              {/* Card visual preview */}
+              <div className="bg-gradient-to-br from-primary via-primary-dark to-primary rounded-2xl p-6 text-white max-w-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+                <div className="flex items-center justify-between mb-8 relative">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-6 bg-amber-400 rounded-md" />
+                    <Wifi className="w-4 h-4 text-white/40 rotate-90" />
+                  </div>
+                  <span className="text-xs font-bold uppercase tracking-widest text-white/60">{financial.card_type || 'CARD'}</span>
+                </div>
+                <p className="text-xl font-mono tracking-[0.2em] mb-6 relative">
+                  â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ {financial.card_last4 || 'â€¢â€¢â€¢â€¢'}
+                </p>
+                <div className="flex justify-between items-end relative">
+                  <div>
+                    <p className="text-[9px] text-white/40 uppercase tracking-wider mb-0.5">Cardholder</p>
+                    <p className="text-sm font-bold tracking-wide">{basic.name || 'YOUR NAME'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-white/40 uppercase tracking-wider mb-0.5">Bank</p>
+                    <p className="text-xs font-semibold">{financial.bank_name || 'â€”'}</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-dark/60 mb-1.5">
@@ -415,7 +574,7 @@ export default function DataCollection() {
                     value={financial.card_last4}
                     onChange={(e) => setFinancial(p => ({ ...p, card_last4: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
                     placeholder="4321"
-                    className="input-field text-center font-mono font-bold tracking-[0.3em]"
+                    className="input-field text-center font-mono font-bold tracking-[0.3em] text-lg"
                   />
                 </div>
                 <div>
@@ -432,10 +591,10 @@ export default function DataCollection() {
                   </select>
                 </div>
               </div>
-              {/* Card type pills */}
+
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-dark/60 mb-2">
-                  <CreditCard className="w-3.5 h-3.5" /> Card Type <span className="text-red-400">*</span>
+                  <CreditCard className="w-3.5 h-3.5" /> Card Network <span className="text-red-400">*</span>
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {CARD_TYPES.map(t => (
@@ -454,18 +613,18 @@ export default function DataCollection() {
                   ))}
                 </div>
               </div>
-              {/* Balance */}
+
               <div className="max-w-xs">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-dark/60 mb-1.5">
-                  <Wallet className="w-3.5 h-3.5" /> Average Balance (₹)
+                  <Wallet className="w-3.5 h-3.5" /> Average Balance (â‚¹)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dark/40 font-bold">₹</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dark/40 font-bold">â‚¹</span>
                   <input
                     type="number"
                     value={financial.avg_balance}
                     onChange={(e) => setFinancial(p => ({ ...p, avg_balance: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) }))}
-                    placeholder="50000"
+                    placeholder="50,000"
                     min={0}
                     className="input-field pl-10 font-mono tabular-nums"
                   />
@@ -473,21 +632,24 @@ export default function DataCollection() {
               </div>
             </div>
           </SectionCard>
+        </div>
 
-          {/* ═══ LOCATION ═══ */}
-          <SectionCard title="Location Intelligence" subtitle="GPS auto-capture with manual override" icon={MapPin} onSave={() => saveSection('location')} saving={saving.location} saved={saved.location}>
+        {/* â•â•â• LOCATION & BEHAVIOR ROW â•â•â• */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+          <SectionCard title="Location Intelligence" subtitle="GPS auto-capture" icon={MapPin}
+            onSave={() => saveSection('location')} saving={saving.location} saved={saved.location}
+          >
             <div className="space-y-4">
-              {/* GPS status bar */}
               <div className={`flex items-center gap-3 p-3 rounded-lg border ${location.lat ? 'bg-green-50 border-green-200' : 'bg-cream-light border-cream-dark/30'}`}>
                 <div className={`w-2.5 h-2.5 rounded-full ${location.lat ? 'bg-green-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
                 <span className="text-sm font-medium text-dark/70">{gpsLoading ? 'Acquiring GPS...' : location.lat ? 'Location Locked' : 'Awaiting GPS'}</span>
                 <button type="button" onClick={fetchGPS} disabled={gpsLoading} className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-dark transition-colors">
-                  <RefreshCw className={`w-3.5 h-3.5 ${gpsLoading ? 'animate-spin' : ''}`} /> Refresh GPS
+                  <RefreshCw className={`w-3.5 h-3.5 ${gpsLoading ? 'animate-spin' : ''}`} /> Refresh
                 </button>
               </div>
 
-              {/* Coords grid */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="Latitude" icon={MapPin} value={location.lat} onChange={(v) => setLocation(p => ({ ...p, lat: v === '' ? '' : Number(v) }))} type="number" placeholder="19.0760" />
                 <Field label="Longitude" icon={MapPin} value={location.lng} onChange={(v) => setLocation(p => ({ ...p, lng: v === '' ? '' : Number(v) }))} type="number" placeholder="72.8777" />
                 <Field label="City" icon={Globe} value={location.city} onChange={(v) => setLocation(p => ({ ...p, city: v }))} placeholder="Mumbai" />
@@ -504,91 +666,70 @@ export default function DataCollection() {
             </div>
           </SectionCard>
 
-          {/* ═══ DEVICE INFO (AUTO) ═══ */}
-          <SectionCard title="Device Intelligence" subtitle="Auto-captured device information" icon={Smartphone} onSave={() => saveSection('device')} saving={saving.device} saved={saved.device}>
+          <SectionCard title="Behavioral Analytics" subtitle="Keystroke & session tracking" icon={Activity}
+            onSave={() => saveSection('behavior')} saving={saving.behavior} saved={saved.behavior}
+          >
             <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { icon: Monitor, label: 'Platform', value: device.platform },
-                  { icon: Globe, label: 'Browser', value: device.browser },
-                  { icon: Monitor, label: 'Screen', value: device.screenResolution },
-                  { icon: Clock, label: 'Timezone', value: device.timezone },
-                ].map(item => (
-                  <div key={item.label} className="card-cream p-3">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <item.icon className="w-3 h-3 text-primary/60" />
-                      <span className="text-[10px] uppercase tracking-wider text-dark/40 font-bold">{item.label}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-dark truncate">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-              {/* Fingerprint */}
-              <div className="p-4 card-cream">
-                <div className="flex items-center gap-2 mb-2">
-                  <Fingerprint className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-bold text-dark">Device Fingerprint</span>
-                  <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200 font-bold">SHA-256</span>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="card-cream p-3 text-center">
+                  <Zap className="w-4 h-4 text-primary mx-auto mb-1.5" />
+                  <p className="text-xl font-black text-dark tabular-nums">{typingSpeed}</p>
+                  <p className="text-[9px] uppercase tracking-wider text-dark/40 font-bold mt-0.5">Char/Sec</p>
+                  {typingSpeed > 0 && <p className={`text-[9px] font-bold ${speedColor} mt-0.5`}>{speedLabel}</p>}
                 </div>
-                <p className="text-[11px] font-mono text-dark/40 break-all leading-relaxed bg-white p-2 rounded-lg border border-cream-dark/20">{device.fingerprint}</p>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ═══ BEHAVIOR (AUTO TRACKING) ═══ */}
-          <SectionCard title="Behavioral Analytics" subtitle="Real-time keystroke & session tracking" icon={Activity} onSave={() => saveSection('behavior')} saving={saving.behavior} saved={saved.behavior}>
-            <div className="space-y-4">
-              {/* Live metrics */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="card-cream p-4 text-center">
-                  <Zap className="w-5 h-5 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-black text-dark tabular-nums">{typingSpeed}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-dark/40 font-bold mt-1">Char/Sec</p>
+                <div className="card-cream p-3 text-center">
+                  <Clock className="w-4 h-4 text-primary mx-auto mb-1.5" />
+                  <p className="text-xl font-black text-dark tabular-nums">{formatDuration(sessionDuration)}</p>
+                  <p className="text-[9px] uppercase tracking-wider text-dark/40 font-bold mt-0.5">Session</p>
                 </div>
-                <div className="card-cream p-4 text-center">
-                  <Clock className="w-5 h-5 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-black text-dark tabular-nums">{formatDuration(sessionDuration)}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-dark/40 font-bold mt-1">Session</p>
-                </div>
-                <div className="card-cream p-4 text-center">
-                  <Activity className="w-5 h-5 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-black text-dark tabular-nums">
+                <div className="card-cream p-3 text-center">
+                  <Activity className="w-4 h-4 text-primary mx-auto mb-1.5" />
+                  <p className="text-xl font-black text-dark tabular-nums">
                     {new Date().getHours().toString().padStart(2, '0')}:{new Date().getMinutes().toString().padStart(2, '0')}
                   </p>
-                  <p className="text-[10px] uppercase tracking-wider text-dark/40 font-bold mt-1">Current Time</p>
+                  <p className="text-[9px] uppercase tracking-wider text-dark/40 font-bold mt-0.5">Active</p>
                 </div>
               </div>
-              {/* Typing speed test */}
+
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-dark/60 mb-1.5">
-                  <Zap className="w-3.5 h-3.5" /> Typing Speed Calibration
+                  <Zap className="w-3.5 h-3.5" /> Typing Calibration
                   <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold">LIVE</span>
                 </label>
                 <textarea
                   rows={2}
                   onKeyDown={handleTypingTrack}
-                  placeholder="Start typing here to calibrate... The quick brown fox jumps over the lazy dog."
-                  className="input-field resize-none"
+                  placeholder="Type here to calibrate... The quick brown fox jumps over the lazy dog."
+                  className="input-field resize-none text-sm"
                 />
+                {typingSpeed > 0 && (
+                  <div className="mt-2 h-1.5 rounded-full bg-cream-dark/20 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-primary/60 to-primary"
+                      animate={{ width: `${Math.min(100, (typingSpeed / 12) * 100)}%` }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </SectionCard>
+        </div>
 
-          {/* ═══ BIOMETRIC (TOGGLE-BASED) ═══ */}
+        {/* â•â•â• BIOMETRIC â€” FULL WIDTH â•â•â• */}
+        <div className="mb-6">
           <SectionCard title="Biometric Verification" subtitle="Face capture & embedding registration" icon={ScanFace}
             onSave={biometricEnabled && faceData ? () => saveSection('biometric') : undefined}
             saving={saving.biometric} saved={saved.biometric}
           >
             <div className="space-y-4">
-              {/* Privacy notice */}
               <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
                 <Shield className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-amber-700">
-                  <strong>Privacy-First:</strong> Your face image is processed locally and discarded immediately. Only a 128-dim numeric embedding is stored — it cannot be reversed into an image.
+                  <strong>Privacy-First:</strong> Your face image is processed locally and discarded immediately. Only a 128-dim numeric embedding is stored â€” it cannot be reversed into an image.
                 </p>
               </div>
 
-              {/* Toggle */}
               <div className="flex items-center justify-between p-4 rounded-lg bg-cream-light border border-cream-dark/20">
                 <div className="flex items-center gap-3">
                   <ScanFace className="w-5 h-5 text-primary" />
@@ -608,7 +749,6 @@ export default function DataCollection() {
                 </button>
               </div>
 
-              {/* Camera viewport (shows when toggle is on and face not captured) */}
               <AnimatePresence>
                 {cameraActive && !faceData && (
                   <motion.div
@@ -621,7 +761,6 @@ export default function DataCollection() {
                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-                      {/* Overlay corners */}
                       <div className="absolute inset-0 pointer-events-none">
                         <div className="absolute top-4 left-4 w-10 h-10 border-t-2 border-l-2 border-primary rounded-tl-lg" />
                         <div className="absolute top-4 right-4 w-10 h-10 border-t-2 border-r-2 border-primary rounded-tr-lg" />
@@ -629,13 +768,11 @@ export default function DataCollection() {
                         <div className="absolute bottom-4 right-4 w-10 h-10 border-b-2 border-r-2 border-primary rounded-br-lg" />
                       </div>
 
-                      {/* Live indicator */}
                       <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dark/80 backdrop-blur">
                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                         <span className="text-[10px] font-bold text-white uppercase tracking-wider">Live</span>
                       </div>
 
-                      {/* Capture button */}
                       <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3">
                         <button type="button" onClick={() => { stopCamera(); setBiometricEnabled(false); }} className="p-2.5 rounded-full bg-white/20 backdrop-blur text-white hover:bg-white/30 transition-all">
                           <X className="w-4 h-4" />
@@ -654,7 +791,6 @@ export default function DataCollection() {
                 )}
               </AnimatePresence>
 
-              {/* Error */}
               {faceError && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
                   <AlertTriangle className="w-4 h-4 text-red-500" />
@@ -662,7 +798,6 @@ export default function DataCollection() {
                 </div>
               )}
 
-              {/* Success state */}
               {faceData && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 rounded-lg bg-green-50 border border-green-200">
                   <div className="flex items-center gap-3 mb-3">
@@ -684,8 +819,30 @@ export default function DataCollection() {
               )}
             </div>
           </SectionCard>
-
         </div>
+
+        {/* â•â•â• FOOTER â•â•â• */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="flex items-center justify-center gap-4 py-6 text-xs text-dark/30"
+        >
+          <div className="flex items-center gap-1.5">
+            <Lock className="w-3 h-3" />
+            <span>End-to-end encrypted</span>
+          </div>
+          <span>â€¢</span>
+          <div className="flex items-center gap-1.5">
+            <Database className="w-3 h-3" />
+            <span>MongoDB Atlas</span>
+          </div>
+          <span>â€¢</span>
+          <div className="flex items-center gap-1.5">
+            <Layers className="w-3 h-3" />
+            <span>Real-time Socket.IO sync</span>
+          </div>
+        </motion.div>
       </div>
     </DashboardLayout>
   );

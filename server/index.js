@@ -13,9 +13,6 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const { initSocket, emitUserUpdate } = require('./socket');
 
-let WebSocketServer;
-try { ({ WebSocketServer } = require('ws')); } catch (e) { WebSocketServer = null; }
-
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
@@ -67,7 +64,6 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: '2.0.0',
     realtime: 'Socket.IO Active',
-    websocket: WebSocketServer ? 'active' : 'unavailable',
   });
 });
 
@@ -86,7 +82,6 @@ app.use('/api/security', require('./routes/security'));
 // ========== SEED BLOCKCHAIN FROM EXISTING DATA ==========
 const store = require('./data/store');
 const blockchain = require('./services/blockchain');
-// Seed blockchain from all existing seed transactions (user-demo-001)
 const seedTxns = store.getTransactions('user-demo-001');
 blockchain.seedFromTransactions(seedTxns);
 
@@ -104,8 +99,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ========== WEBSOCKET LIVE THREAT FEED (via Socket.IO) ==========
-
+// ========== LIVE THREAT FEED (via Socket.IO — no ws conflict) ==========
 const THREAT_EVENTS = [
   { eventStatus: 'BLOCKED', amount: 215000, recipient: 'fraud001@darkweb', score: 94, location: 'Amsterdam, NL', factor: 'VPN + Blacklisted IP' },
   { eventStatus: 'REVIEW',  amount: 75000,  recipient: 'new.vendor@ybl',   score: 58, location: 'Jaipur, IN',    factor: 'New Device + Late Night' },
@@ -129,11 +123,44 @@ const emitThreat = () => {
 
 const broadcast = (data) => io.to('dashboard').emit('THREAT_EVENT', data);
 
-console.log('WebSocket Live Threat Feed: ACTIVE (via Socket.IO)');
-
+// ========== PORT CONFLICT HANDLER ==========
+function killPortAndRetry() {
+  console.log(`\n⚠ Port ${PORT} is busy — killing stale process...`);
+  const { execSync } = require('child_process');
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano | findstr ":${PORT}" | findstr "LISTENING"`, { encoding: 'utf8' });
+      const pids = [...new Set(out.trim().split('\n').map(l => l.trim().split(/\s+/).pop()))];
+      for (const pid of pids) {
+        if (pid && pid !== '0' && pid !== String(process.pid)) {
+          try { execSync(`taskkill /F /PID ${pid}`, { encoding: 'utf8' }); console.log(`  ✓ Killed PID ${pid}`); } catch { /* already dead */ }
+        }
+      }
+    } else {
+      execSync(`fuser -k ${PORT}/tcp`, { encoding: 'utf8' });
+    }
+    setTimeout(() => {
+      console.log(`  ↻ Retrying port ${PORT}...`);
+      startServer();
+    }, 1500);
+  } catch (killErr) {
+    console.error(`  ✗ Could not free port ${PORT}. Kill the process manually and try again.`);
+    process.exit(1);
+  }
+}
 
 // ========== START SERVER ==========
-connectDB().then(() => {
+function startServer() {
+  server.removeAllListeners('error');
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      killPortAndRetry();
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
+  });
+
   server.listen(PORT, () => {
     console.log('\n╔════════════════════════════════════════╗');
     console.log('║  RAKSHAK AI - THE SOVEREIGN ARCHIVE   ║');
@@ -143,7 +170,7 @@ connectDB().then(() => {
     console.log('║  Neural Engine: ONLINE                 ║');
     console.log('║  Database: MONGODB CONNECTED           ║');
     console.log('║  Real-Time: SOCKET.IO ACTIVE           ║');
-    console.log('║  WebSocket: LIVE THREAT FEED ACTIVE    ║');
+    console.log('║  Threat Feed: LIVE                     ║');
     console.log('╠════════════════════════════════════════╣');
     console.log('║  Demo Accounts:                        ║');
     console.log('║  demo@rakshak.ai / Demo@123            ║');
@@ -153,7 +180,10 @@ connectDB().then(() => {
     // Start threat feed 5 seconds after server is live
     setTimeout(emitThreat, 5000);
   });
-});
+}
 
+connectDB().then(() => {
+  startServer();
+});
 
 module.exports = { app, server, broadcast };

@@ -15,7 +15,7 @@ export function useWebSocket(onMessage) {
 
     const connect = () => {
       try {
-        ws.current = new WebSocket('ws://localhost:5000');
+        ws.current = new WebSocket('ws://localhost:5000/ws/threats');
         ws.current.onmessage = (e) => {
           try { onMessageRef.current(JSON.parse(e.data)); } catch {}
         };
