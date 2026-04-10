@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import {
   Search, Filter, Download, ChevronLeft, ChevronRight,
   ChevronUp, ChevronDown, Eye, CheckCircle, XCircle, Clock,
-  Database, AlertTriangle, ShieldCheck
+  Database, AlertTriangle, ShieldCheck, Link2, Hash
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -33,6 +33,7 @@ export default function AuditTrail() {
   const [transactions, setTransactions] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 15, total: 0, totalPages: 1 });
   const [metrics, setMetrics] = useState({ totalMonitored: 0, riskFlagged: 0, systemHealth: 'Sovereign Active' });
+  const [chainStatus, setChainStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -78,6 +79,12 @@ export default function AuditTrail() {
         setPagination(res.data.pagination);
         setMetrics(res.data.metrics);
       }
+
+      // Also fetch blockchain verification status
+      try {
+        const chainRes = await api.get('/blockchain/verify');
+        if (chainRes.data.success) setChainStatus(chainRes.data);
+      } catch { /* ignore if blockchain not available */ }
     } catch (err) {
       console.error('Audit fetch error:', err);
     } finally {
@@ -146,7 +153,7 @@ export default function AuditTrail() {
         </div>
 
         {/* Metrics Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -190,6 +197,31 @@ export default function AuditTrail() {
             <div>
               <p className="text-2xl font-black text-green-600">{metrics.systemHealth}</p>
               <p className="text-xs text-dark/50 font-semibold uppercase tracking-wider">System Health</p>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className={`card p-5 flex items-center gap-4 border-2 ${
+              chainStatus?.valid ? 'border-green-200' : chainStatus === null ? 'border-cream-dark/20' : 'border-red-200'
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              chainStatus?.valid ? 'bg-green-100' : chainStatus === null ? 'bg-cream-light' : 'bg-red-100'
+            }`}>
+              <Link2 className={`w-5 h-5 ${
+                chainStatus?.valid ? 'text-green-600' : chainStatus === null ? 'text-dark/30' : 'text-red-600'
+              }`} />
+            </div>
+            <div>
+              <p className={`text-sm font-black ${
+                chainStatus?.valid ? 'text-green-600' : chainStatus === null ? 'text-dark/40' : 'text-red-600'
+              }`}>
+                {chainStatus?.valid ? 'Chain Intact' : chainStatus === null ? 'Loading...' : 'Chain Broken'}
+              </p>
+              <p className="text-xs text-dark/50 font-semibold uppercase tracking-wider">Blockchain</p>
             </div>
           </motion.div>
         </div>
@@ -257,13 +289,14 @@ export default function AuditTrail() {
         {/* Table */}
         <div className="card overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-7 px-6 py-3 bg-cream-light border-b border-cream-dark/20 text-xs font-bold uppercase tracking-wider text-dark/40">
+          <div className="grid px-6 py-3 bg-cream-light border-b border-cream-dark/20 text-xs font-bold uppercase tracking-wider text-dark/40" style={{ gridTemplateColumns: '5.5rem minmax(0,1.6fr) minmax(0,1fr) 5.5rem 7rem 6.5rem 5.5rem 2.5rem' }}>
             {[
               { label: 'Reference', col: 'reference' },
               { label: 'Recipient', col: null },
               { label: 'Type', col: 'type' },
               { label: 'Amount', col: 'amount' },
               { label: 'Risk Score', col: 'riskScore' },
+              { label: 'Hash', col: null },
               { label: 'Status', col: 'status' },
               { label: 'Actions', col: null },
             ].map(({ label, col }) => (
@@ -281,8 +314,8 @@ export default function AuditTrail() {
           {/* Rows */}
           {loading ? (
             Array(8).fill(0).map((_, i) => (
-              <div key={i} className="grid grid-cols-7 px-6 py-4 border-b border-cream/50 gap-4 items-center">
-                {Array(7).fill(0).map((_, j) => (
+              <div key={i} className="grid px-6 py-4 border-b border-cream/50 gap-4 items-center" style={{ gridTemplateColumns: '5.5rem minmax(0,1.6fr) minmax(0,1fr) 5.5rem 7rem 6.5rem 5.5rem 2.5rem' }}>
+                {Array(8).fill(0).map((_, j) => (
                   <div key={j} className="h-4 shimmer rounded" />
                 ))}
               </div>
@@ -300,22 +333,23 @@ export default function AuditTrail() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.02 }}
-                className="grid grid-cols-7 items-center px-6 py-4 border-b border-cream/40 hover:bg-cream-light/50 transition-colors"
+                className="grid items-center px-6 py-4 border-b border-cream/40 hover:bg-cream-light/50 transition-colors"
+                style={{ gridTemplateColumns: '5.5rem minmax(0,1.6fr) minmax(0,1fr) 5.5rem 7rem 6.5rem 5.5rem 2.5rem' }}
               >
                 {/* Reference */}
                 <div className="text-xs font-mono font-bold text-dark/70">{txn.reference}</div>
 
                 {/* Recipient */}
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{txn.recipient?.icon || '👤'}</span>
-                  <div>
-                    <p className="text-xs font-semibold text-dark leading-tight">{txn.recipient?.name}</p>
-                    <p className="text-xs text-dark/40">{txn.recipient?.vpa}</p>
+                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+                  <span className="text-sm flex-shrink-0">{txn.recipient?.icon || '👤'}</span>
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xs font-semibold text-dark leading-tight truncate">{txn.recipient?.name}</p>
+                    <p className="text-xs text-dark/40 truncate">{txn.recipient?.vpa}</p>
                   </div>
                 </div>
 
                 {/* Type */}
-                <div className="text-xs text-dark/50">{txn.type}</div>
+                <div className="text-xs text-dark/50 min-w-0 overflow-hidden truncate pr-1">{txn.type}</div>
 
                 {/* Amount */}
                 <div className={`text-sm font-bold tabular-nums ${txn.status === 'BLOCKED' ? 'text-red-600' : 'text-dark'}`}>
@@ -325,6 +359,11 @@ export default function AuditTrail() {
                 {/* Risk Score */}
                 <div className="pr-4">
                   <RiskScoreBar score={txn.riskAnalysis?.riskScore || 0} />
+                </div>
+
+                {/* Hash */}
+                <div className="text-xs font-mono text-dark/40 truncate pr-2" title={txn.transactionHash || 'N/A'}>
+                  {txn.transactionHash ? shortHash(txn.transactionHash, 8) : '—'}
                 </div>
 
                 {/* Status */}

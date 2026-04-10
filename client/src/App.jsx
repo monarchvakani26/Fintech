@@ -12,6 +12,7 @@ import Payments from './pages/Payments';
 import PaymentAnalysis from './pages/PaymentAnalysis';
 import PaymentResult from './pages/PaymentResult';
 import AuditTrail from './pages/AuditTrail';
+import BlockchainExplorer from './pages/BlockchainExplorer';
 import Settings from './pages/Settings';
 
 // Protected route wrapper
@@ -99,6 +100,12 @@ function AppRoutes() {
       <Route path="/audit" element={
         <ProtectedRoute>
           <AuditTrail />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/blockchain" element={
+        <ProtectedRoute>
+          <BlockchainExplorer />
         </ProtectedRoute>
       } />
 

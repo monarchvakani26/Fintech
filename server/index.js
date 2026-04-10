@@ -67,6 +67,14 @@ app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/demo', require('./routes/demo'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/blockchain', require('./routes/blockchain'));
+
+// ========== SEED BLOCKCHAIN FROM EXISTING DATA ==========
+const store = require('./data/store');
+const blockchain = require('./services/blockchain');
+// Seed blockchain from all existing seed transactions (user-demo-001)
+const seedTxns = store.getTransactions('user-demo-001');
+blockchain.seedFromTransactions(seedTxns);
 
 // ========== 404 HANDLER ==========
 app.use('/{*splat}', (req, res) => {

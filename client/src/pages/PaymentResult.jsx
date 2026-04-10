@@ -17,6 +17,31 @@ import RiskScoreBar from '../components/common/RiskScoreBar';
 import { formatCurrency, formatDate, shortHash, getRiskLevel } from '../utils/formatters';
 import api from '../services/api';
 
+// Human-readable explanations for risk factors
+function getFactorExplanation(factor) {
+  const explanations = {
+    'Extreme High Transaction Amount': 'The transaction amount significantly exceeds standard thresholds, triggering automatic elevated scrutiny.',
+    'High Transaction Amount': 'This amount is higher than typical transactions for this profile, contributing to increased risk.',
+    'New Device Fingerprint Detected': 'This device has never been used before with this account. New devices are flagged until establish trusted history.',
+    'Untrusted Device': 'This device has been seen before but has not yet been verified as trusted.',
+    'VPN/Proxy Connection Detected': 'The transaction originates from a VPN or proxy server, which is commonly used to mask true location.',
+    'Rapid Transaction Velocity (>3 in 1 hour)': 'Multiple transactions in rapid succession can indicate automated fraud or account compromise.',
+    'First Transaction to New Recipient': 'Sending funds to a new recipient for the first time carries inherent uncertainty risk.',
+    'Recipient on Sovereign Watchlist': 'The recipient VPA appears on our global fraud watchlist based on reported suspicious activity.',
+    'Daily Transaction Limit Approaching': 'The cumulative daily transaction volume is approaching the safety threshold for this account.',
+    'Unusual Time of Transaction (Late Night)': 'Transactions between 2-6 AM carry higher risk as they deviate from normal activity patterns.',
+  };
+
+  // Partial match for dynamic factors
+  const lowerFactor = factor.toLowerCase();
+  if (lowerFactor.includes('location mismatch')) return 'The transaction location differs from the account\'s usual geographic area.';
+  if (lowerFactor.includes('unusual location')) return 'The IP or geographic origin is not typically associated with this account.';
+  if (lowerFactor.includes('ip blacklisted')) return 'This IP address is flagged on international fraud registries.';
+  if (lowerFactor.includes('variance')) return 'The transaction amount deviates significantly from the user\'s historical average.';
+
+  return explanations[factor] || 'This factor was flagged by the AI risk assessment engine.';
+}
+
 export default function PaymentResult() {
   const { id } = useParams();
   const location = useLocation();
@@ -252,6 +277,66 @@ export default function PaymentResult() {
                 </div>
               )}
             </motion.div>
+
+            {/* Explainability Section */}
+            {analysis && (status === 'BLOCKED' || status === 'REVIEW') && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+                className="card p-6 mt-4 border-2 border-primary/20"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-dark uppercase tracking-wider">
+                      {status === 'BLOCKED' ? 'Why was this transaction blocked?' : 'Why is this under review?'}
+                    </h3>
+                    <p className="text-xs text-dark/40">AI Explainability Report</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {/* Risk Factor Explanations */}
+                  {analysis.riskFactors?.map((factor, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, x: -5 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.06 }}
+                      className="flex items-start gap-3 p-3 bg-cream-light/60 rounded-lg"
+                    >
+                      <div className="w-6 h-6 bg-red-100 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-xs font-black text-red-600">{i + 1}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-dark">{factor}</p>
+                        <p className="text-xs text-dark/40 mt-0.5">
+                          {getFactorExplanation(factor)}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* AI Decision Summary */}
+                <div className="mt-4 pt-4 border-t border-cream-dark/15">
+                  <p className="text-xs font-bold uppercase tracking-wider text-dark/40 mb-2">AI Decision Summary</p>
+                  <p className="text-sm text-dark/70 leading-relaxed">
+                    The Rakshak AI engine analyzed this transaction across <strong>6 risk dimensions</strong>{' '}
+                    (amount, device, location, behavior, velocity, recipient) using{' '}
+                    <strong>{analysis.aiConsensus?.totalNodes || 5} independent AI nodes</strong>.{' '}
+                    {analysis.aiConsensus?.agreeCount || 3} out of {analysis.aiConsensus?.totalNodes || 5} nodes{' '}
+                    recommended <strong>{status === 'BLOCKED' ? 'blocking' : 'caution'}</strong> with{' '}
+                    <strong>{analysis.aiConsensus?.consensusStrength || 'Strong'}</strong> consensus.
+                    The final risk score of <strong>{riskScore}/100</strong> exceeded the{' '}
+                    {status === 'BLOCKED' ? '70-point blocking threshold' : '30-point review threshold'}.
+                  </p>
+                </div>
+              </motion.div>
+            )}
 
             {/* AI Consensus + History + IP Mismatch Cards */}
             {analysis && (

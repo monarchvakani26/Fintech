@@ -10,6 +10,7 @@ const { authMiddleware } = require('../middleware/auth');
 const store = require('../data/store');
 const { analyzeFraud } = require('../services/fraudEngine');
 const { updateTrustScoreAfterTransaction } = require('../services/trustScore');
+const blockchain = require('../services/blockchain');
 
 // POST /api/payments/initiate
 router.post('/initiate', authMiddleware, async (req, res) => {
@@ -113,6 +114,18 @@ router.post('/analyze/:transactionId', authMiddleware, async (req, res) => {
       transactionHash,
       processedAt: new Date(),
       'recipient.onWatchlist': store.isOnWatchlist(transaction.recipient.vpa),
+    });
+
+    // Add to blockchain
+    const blockchainBlock = blockchain.addBlock({
+      transactionId: transactionId,
+      amount: transaction.amount,
+      sender: user.id,
+      receiver: transaction.recipient.vpa,
+      status: analysis.decision,
+      riskScore: analysis.riskScore,
+      reference: transaction.reference,
+      type: transaction.type,
     });
 
     // Update trust score
