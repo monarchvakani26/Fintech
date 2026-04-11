@@ -94,4 +94,20 @@ function emitRiskUpdate(userId, riskData) {
   io.to('dashboard').emit('risk-score-changed', payload);
 }
 
-module.exports = { initSocket, getIO, emitUserUpdate, emitRiskUpdate };
+/**
+ * Emit a new-transaction event to the user's room and dashboard room.
+ * @param {string} userId
+ * @param {object} transaction - the completed transaction object
+ */
+function emitTransactionUpdate(userId, transaction) {
+  if (!io) return;
+  const payload = {
+    userId,
+    transaction,
+    timestamp: new Date().toISOString(),
+  };
+  io.to(`user:${userId}`).emit('transaction-update', payload);
+  io.to('dashboard').emit('transaction-update', payload);
+}
+
+module.exports = { initSocket, getIO, emitUserUpdate, emitRiskUpdate, emitTransactionUpdate };

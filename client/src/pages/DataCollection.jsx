@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Rakshak AI â€” Data Collection Page
 // Professional fintech card-based layout with real-time sync.
 // Each section is an independent card matching cream/primary UI.
@@ -165,7 +165,7 @@ function detectOS() {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 export default function DataCollection() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, updateUser } = useAuth();
   const { connected, subscribe } = useSocket();
 
   const [saving, setSaving] = useState({});
@@ -335,6 +335,10 @@ export default function DataCollection() {
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} saved & synced to dashboard`, {
           style: { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' },
         });
+        // For biometric: immediately patch context so PaymentGate sees it
+        if (section === 'biometric' && res.data.user?.biometric) {
+          updateUser({ biometric: res.data.user.biometric });
+        }
         refreshUser();
       }
     } catch (err) {

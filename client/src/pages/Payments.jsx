@@ -3,14 +3,16 @@
 // + Real-time risk preview as user types
 // ============================================================
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useContext } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, BookOpen, Shield, ArrowRight, AtSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import PaymentGate from '../components/PaymentGate';
 import { generateDeviceFingerprint, collectDeviceSignals } from '../utils/deviceFingerprint';
 import api from '../services/api';
+import AuthContext from '../context/AuthContext';
 
 function formatAmountInput(value) {
   const nums = value.replace(/[^\d.]/g, '');
@@ -21,12 +23,16 @@ function formatAmountInput(value) {
 }
 
 export default function Payments() {
+  const { user } = useContext(AuthContext);
   const [vpa, setVpa] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [vpaError, setVpaError] = useState('');
   const [previewRisk, setPreviewRisk] = useState(null);
+  // Gate state: 'idle' (gate not shown) | 'gate' (showing gate) | 'verified' (gate passed)
+  const [gateState, setGateState] = useState('idle');
+  const [gateResult, setGateResult] = useState(null);
   const navigate = useNavigate();
 
   const validateVPA = (value) => {
@@ -62,7 +68,8 @@ export default function Payments() {
     setPreviewRisk(score);
   }, [amount, vpa]);
 
-  const handleSubmit = async (e) => {
+  // Called when user clicks Submit — show gate first, then initiate
+  const handleSubmitClick = (e) => {
     e.preventDefault();
     const vpaErr = validateVPA(vpa);
     if (vpaErr) { setVpaError(vpaErr); return; }
@@ -70,8 +77,16 @@ export default function Payments() {
       toast.error('Please enter a valid amount');
       return;
     }
+    // Launch the 3-step gate
+    setGateState('gate');
+  };
 
+  // Called after gate completes all 3 steps
+  const handleGateComplete = async (results) => {
+    setGateResult(results);
+    setGateState('verified');
     setLoading(true);
+
     try {
       const fingerprint = generateDeviceFingerprint();
       const signals = collectDeviceSignals();
@@ -86,7 +101,7 @@ export default function Payments() {
       if (!initiateRes.data.success) throw new Error(initiateRes.data.message);
 
       const { transactionId } = initiateRes.data;
-      toast.success('Transaction initiated — running AI analysis...', { icon: '🛡️' });
+      toast.success('Verification passed — running AI analysis...', { icon: '🛡️' });
 
       navigate(`/payments/analyze/${transactionId}`, {
         state: {
@@ -96,6 +111,8 @@ export default function Payments() {
           note,
           deviceFingerprint: fingerprint,
           deviceSignals: signals,
+          // Pass the full gate result for accurate fraud scoring
+          gateVerification: results,
           isDemo: false,
         },
       });
@@ -103,8 +120,11 @@ export default function Payments() {
       const msg = err.response?.data?.message || err.message || 'Failed to initiate payment';
       toast.error(msg);
       setLoading(false);
+      setGateState('idle');
     }
   };
+
+  const handleGateCancel = () => setGateState('idle');
 
   const riskColor = previewRisk === null ? '' :
     previewRisk <= 20 ? 'text-green-600' :
@@ -120,6 +140,17 @@ export default function Payments() {
 
   return (
     <DashboardLayout>
+      {/* ── Payment Gate Modal ── */}
+      <AnimatePresence>
+        {gateState === 'gate' && (
+          <PaymentGate
+            user={user}
+            onComplete={handleGateComplete}
+            onCancel={handleGateCancel}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="max-w-5xl">
         <div className="grid grid-cols-2 gap-10 items-start">
           {/* ====== LEFT: Branding ====== */}
@@ -171,7 +202,7 @@ export default function Payments() {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmitClick} className="space-y-5">
                 {/* Recipient VPA */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-dark/50 mb-2">

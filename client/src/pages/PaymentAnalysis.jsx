@@ -76,6 +76,8 @@ export default function PaymentAnalysis() {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             country: 'India',
             city: 'Mumbai',
+            // Pass the gate verification results for accurate fraud scoring
+            gateVerification: state.gateVerification || {},
           });
           setAnalysisResult(res.data);
         }

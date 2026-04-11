@@ -333,14 +333,18 @@ router.post('/biometric-register', authMiddleware, async (req, res) => {
       });
     }
 
-    user.biometric = {
-      enabled: true,
-      face_embedding,
-      embedding_model: embedding_model || 'face-api.js',
-      last_verified: new Date(),
-      verification_confidence: confidence || 0.95,
-    };
-    user.security.biometric_enabled = true;
+    // Use set() on individual fields so Mongoose tracks changes correctly
+    user.biometric.enabled = true;
+    user.biometric.face_embedding = face_embedding;
+    user.biometric.embedding_model = embedding_model || 'face-api.js';
+    user.biometric.last_verified = new Date();
+    user.biometric.verification_confidence = confidence || 0.95;
+    user.markModified('biometric'); // force Mongoose to detect nested change
+
+    if (user.security) {
+      user.security.biometric_enabled = true;
+      user.markModified('security');
+    }
 
     // Recalculate risk
     const riskResult = recalculateRisk(user);

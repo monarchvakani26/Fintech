@@ -1,10 +1,11 @@
 // ============================================================
 // Rakshak AI - Core Fraud Detection Engine
-// Multi-layered risk scoring with AI consensus simulation
+// Multi-layered risk scoring with AI Consensus Layer v2
 // ============================================================
 
 const crypto = require('crypto');
 const store = require('../data/store');
+const { runConsensusLayer } = require('./consensusLayer');
 
 // Blacklisted IPs (simulated Global Fraud Registry)
 const BLACKLISTED_IPS = [
@@ -49,7 +50,24 @@ async function analyzeFraud(params) {
     country = 'India',
     city = 'Mumbai',
     note = '',
+    // Gate verification results from the pre-payment 3-factor check
+    gateVerification = {},
   } = params;
+
+  // Destructure gate results (defaults = unverified/unknown)
+  const {
+    biometric: gateBio = {},          // { passed, confidence, method }
+    location: gateLoc = {},           // { passed, distanceKm, denied }
+    otp: gateOTP = {},                // { passed, skipped }
+  } = gateVerification;
+
+  const biometricGatePassed     = gateBio.passed === true;
+  const biometricGateConfidence = gateBio.confidence || 0;
+  const biometricGateSkipped    = gateBio.method === 'skipped';
+  const realDistanceKm          = typeof gateLoc.distanceKm === 'number' ? gateLoc.distanceKm : null;
+  const locationGatePassed      = gateLoc.passed === true;
+  const locationGpsDenied       = gateLoc.denied === true;
+  const otpPassed               = gateOTP.passed === true;
 
   const user = store.findUserById(userId);
   if (!user) throw new Error('User not found');
@@ -103,12 +121,12 @@ async function analyzeFraud(params) {
   }
   riskScore += breakdown.deviceRisk;
 
-  // ========== 3. LOCATION RISK ==========
-  const vpnDetected = isVPNorProxy(ip);
-  const blacklisted = isBlacklisted(ip);
+  // ========== 3. LOCATION RISK (GPS-first, IP-fallback) ==========
+  let vpnDetected = isVPNorProxy(ip);
+  let blacklisted = isBlacklisted(ip);
   const primaryLocation = (user.locations && user.locations[0]) || null;
   const countryMismatch = primaryLocation && primaryLocation.country !== country;
-  const cityMismatch = primaryLocation && primaryLocation.city !== city;
+  const cityMismatch    = primaryLocation && primaryLocation.city !== city;
 
   const locationInfo = {
     ip,
@@ -117,22 +135,54 @@ async function analyzeFraud(params) {
     isVPN: vpnDetected,
     isBlacklisted: blacklisted,
     mismatch: countryMismatch || cityMismatch,
+    realDistanceKm,
   };
 
-  if (blacklisted) {
-    breakdown.locationRisk += 25;
-    riskFactors.push(`IP Blacklisted on Global Fraud Registry (GF-Tier 1)`);
-  }
-  if (vpnDetected) {
-    breakdown.locationRisk += 20;
-    riskFactors.push('VPN/Proxy Connection Detected');
-  }
-  if (countryMismatch) {
-    breakdown.locationRisk += 25;
-    riskFactors.push(`Location Mismatch: Transaction from ${country} (usual: ${primaryLocation.country})`);
-  } else if (cityMismatch) {
-    breakdown.locationRisk += 15;
-    riskFactors.push(`Unusual Location Detected (${city})`);
+  // GPS distance from gate takes priority over IP-based guesses
+  if (realDistanceKm !== null) {
+    // Real GPS verified
+    if (realDistanceKm <= 50) {
+      // Within home zone — very low location risk
+      breakdown.locationRisk = 0;
+      locationInfo.realDistanceKm = realDistanceKm;
+    } else if (realDistanceKm <= 200) {
+      // Moderate distance — flag but don’t panic
+      breakdown.locationRisk = 15;
+      riskFactors.push(`Moderate Distance from Home (${realDistanceKm} km)`);
+    } else if (realDistanceKm <= 600) {
+      // Far — significant signal but may be valid travel
+      breakdown.locationRisk = 28;
+      riskFactors.push(`Far from Home Location (${realDistanceKm} km) — possible travel detected`);
+    } else {
+      // Very far / suspicious
+      breakdown.locationRisk = 40;
+      riskFactors.push(`Extreme Distance from Home (${realDistanceKm} km)`);
+    }
+    // Still add VPN/blacklist on top of GPS-based risk
+    if (blacklisted) { breakdown.locationRisk = Math.min(breakdown.locationRisk + 15, 50); riskFactors.push('IP Blacklisted on Global Fraud Registry (GF-Tier 1)'); }
+    if (vpnDetected) { breakdown.locationRisk = Math.min(breakdown.locationRisk + 10, 50); riskFactors.push('VPN/Proxy Connection Detected'); }
+  } else {
+    // No GPS — fall back to IP-based location scoring
+    if (blacklisted) {
+      breakdown.locationRisk += 25;
+      riskFactors.push('IP Blacklisted on Global Fraud Registry (GF-Tier 1)');
+    }
+    if (vpnDetected) {
+      breakdown.locationRisk += 20;
+      riskFactors.push('VPN/Proxy Connection Detected');
+    }
+    if (countryMismatch) {
+      breakdown.locationRisk += 25;
+      riskFactors.push(`Location Mismatch: Transaction from ${country} (usual: ${primaryLocation.country})`);
+    } else if (cityMismatch) {
+      breakdown.locationRisk += 15;
+      riskFactors.push(`Unusual Location Detected (${city})`);
+    }
+    // GPS was denied or skipped — slight penalty for not allowing location
+    if (locationGpsDenied) {
+      breakdown.locationRisk = Math.min(breakdown.locationRisk + 8, 50);
+      riskFactors.push('GPS location access denied');
+    }
   }
   breakdown.locationRisk = Math.min(breakdown.locationRisk, 50);
   riskScore += breakdown.locationRisk;
@@ -214,54 +264,148 @@ async function analyzeFraud(params) {
     variance: varianceStr,
   };
 
-  // ========== 8. CAP SCORE ==========
+  // ========== 8. GATE VERIFICATION ADJUSTMENTS ==========
+  // Real signals from the 3-factor gate override simulated values
+
+  // Biometric gate
+  if (biometricGatePassed && biometricGateConfidence >= 0.75) {
+    // Strong biometric match — reduce suspicion significantly
+    riskScore = Math.max(0, riskScore - 15);
+    // Remove device-related factors in-place (riskFactors is const)
+    for (let i = riskFactors.length - 1; i >= 0; i--) {
+      if (riskFactors[i].includes('Device')) riskFactors.splice(i, 1);
+    }
+  } else if (biometricGateSkipped) {
+    riskScore = Math.min(100, riskScore + 10);
+    riskFactors.push('Biometric verification skipped');
+  } else if (gateBio.method === 'face_failed') {
+    riskScore = Math.min(100, riskScore + 18);
+    riskFactors.push('Biometric face match FAILED at payment gate');
+  }
+
+  // OTP gate
+  if (otpPassed) {
+    riskScore = Math.max(0, riskScore - 8);
+  } else if (gateOTP.skipped) {
+    riskScore = Math.min(100, riskScore + 8);
+    riskFactors.push('OTP verification skipped');
+  }
+
+  // ========== 9. CAP SCORE ==========
   riskScore = Math.min(100, Math.max(0, riskScore));
 
-  // ========== 9. DECISION ==========
+  // ========== 9. DECISION (pre-consensus baseline) ==========
   let decision;
   if (riskScore <= 30) decision = 'APPROVED';
   else if (riskScore <= 69) decision = 'REVIEW';
   else decision = 'BLOCKED';
 
-  // ========== 10. AI CONSENSUS SIMULATION ==========
-  const nodes = [
-    { name: 'Conservative', weights: { amount: 1.5, device: 1.0, location: 1.0, behavior: 0.8, velocity: 1.2, recipient: 1.0 } },
-    { name: 'Device-Focused', weights: { amount: 0.8, device: 1.8, location: 1.0, behavior: 1.0, velocity: 0.9, recipient: 1.0 } },
-    { name: 'Location-Focused', weights: { amount: 0.9, device: 1.0, location: 1.8, behavior: 1.0, velocity: 0.8, recipient: 1.0 } },
-    { name: 'Behavioral', weights: { amount: 1.0, device: 0.8, location: 0.9, behavior: 1.8, velocity: 1.2, recipient: 1.1 } },
-    { name: 'Balanced', weights: { amount: 1.0, device: 1.0, location: 1.0, behavior: 1.0, velocity: 1.0, recipient: 1.0 } },
-  ];
+  // ========== 10. AI CONSENSUS LAYER v2 ==========
+  // Build user context
+  const userContext = {
+    trustScore:       user.trustScore || user.risk?.trust_score || 50,
+    transactionCount: user.transactionStats?.totalCount || userTxns.length || 0,
+    averageAmount:    user.transactionStats?.averageAmount || user.behavioral?.avg_transaction_amount || 10000,
+    amount,
+  };
 
-  const nodeDecisions = nodes.map(node => {
-    const nodeScore = Math.min(100, Math.max(0,
-      breakdown.amountRisk * node.weights.amount +
-      breakdown.deviceRisk * node.weights.device +
-      breakdown.locationRisk * node.weights.location +
-      breakdown.behaviorRisk * node.weights.behavior +
-      breakdown.velocityRisk * node.weights.velocity +
-      breakdown.recipientRisk * node.weights.recipient
-    ));
-    if (nodeScore <= 30) return 'APPROVED';
-    if (nodeScore <= 69) return 'REVIEW';
-    return 'BLOCKED';
-  });
+  // Build rich signal object from MongoDB user’s stored data + gate verification
+  const currentHourForSignals = new Date().getHours();
+  const activeHours = user.behavioral?.usual_active_hours || { start: 9, end: 22 };
+  const isUsualHour = currentHourForSignals >= activeHours.start && currentHourForSignals <= activeHours.end;
+  const userHomeCountry = user.location?.home_location?.country || 'India';
+  // deviceList already declared above in device fingerprint section — reuse it
 
-  const decisionCounts = { APPROVED: 0, REVIEW: 0, BLOCKED: 0 };
-  nodeDecisions.forEach(d => decisionCounts[d]++);
-  const majorityDecision = Object.entries(decisionCounts).sort((a, b) => b[1] - a[1])[0][0];
-  const agreeCount = decisionCounts[majorityDecision];
-  const consensusStrength = agreeCount >= 4 ? 'Strong' : agreeCount === 3 ? 'Moderate' : 'Weak';
+  const riskEngineOutput = {
+    breakdown,
+    riskScore,
+    riskFactors,
+    identitySignals: {
+      kycVerified:          !!(user.financial?.card_last4 && user.financial?.card_type && user.financial?.bank_name),
+      identityMatchScore:   user.risk?.trust_score || 50,
+      accountAgeMonths:     user.createdAt ? Math.floor((Date.now() - new Date(user.createdAt)) / (1000 * 60 * 60 * 24 * 30)) : 6,
+      previousFraudFlags:   (user.risk?.flags || []).length,
+      documentVerified:     !!(user.financial?.card_last4),
+    },
+    deviceIntelligence: {
+      fingerprintHash:         deviceInfo.fingerprint,
+      isKnownDevice:           !deviceInfo.isNewDevice,
+      deviceTrustScore:        deviceInfo.isTrusted ? 85 : (deviceInfo.isNewDevice ? 20 : 50),
+      vpnDetected:             vpnDetected,
+      torDetected:             false,
+      emulatorDetected:        false,
+      deviceChangeFrequency:   deviceList.length,
+    },
+    cardSignals: {
+      cardType:            (user.financial?.card_type || '').toLowerCase(),
+      cardAgeMonths:       12,
+      cardCountryMatch:    country === userHomeCountry || country === 'India',
+      isNewCard:           false,
+      cardUsageFrequency:  Math.min(userTxns.length / 2, 30),
+      internationalCard:   country !== userHomeCountry && country !== 'India',
+    },
+    locationSignals: {
+      ipCountry:               country,
+      userHomeCountry:         userHomeCountry,
+      isVPN:                   vpnDetected,
+      isTor:                   false,
+      isDatacenterIP:          vpnDetected,
+      // Use REAL GPS distance if available, otherwise estimate from IP
+      distanceFromLastTxnKm:   realDistanceKm !== null ? realDistanceKm : (countryMismatch ? 1500 : (cityMismatch ? 300 : 0)),
+      geoVelocityFlagMinutes:  recentTxns.length > 0 ? 5 : 999,
+      locationRiskTier:        breakdown.locationRisk >= 30 ? 'HIGH' : breakdown.locationRisk >= 10 ? 'MEDIUM' : 'LOW',
+      gpsDenied:               locationGpsDenied,
+      realDistanceKm,
+    },
+    behaviorSignals: {
+      transactionHour:          currentHourForSignals,
+      isUsualHour:              isUsualHour,
+      dayOfWeekAnomaly:         false,
+      velocityLast1h:           recentTxns.length,
+      velocityLast24h:          todayTxns.length,
+      averageTxnGap:            120,
+      recipientIsNew:           isNewRecipient,
+      recipientTransactionCount: previousRecipients.filter(r => r === recipientVPA).length,
+    },
+    // Use REAL gate biometric results — overrides simulation
+    biometricSignals: {
+      biometricVerified:    biometricGatePassed,
+      biometricConfidence:  Math.round(biometricGateConfidence * 100),
+      biometricMethod:      gateBio.method || 'none',
+      biometricAttempts:    1,
+      biometricOverridden:  biometricGateSkipped || (!biometricGatePassed && gateBio.method !== 'face_failed'),
+      otpVerified:          otpPassed,
+    },
+  };
 
-  // If weak consensus, escalate to REVIEW
-  const finalDecision = consensusStrength === 'Weak' ? 'REVIEW' : (majorityDecision === decision ? decision : majorityDecision);
+  // Run the real consensus layer
+  const consensusResult = runConsensusLayer(breakdown, riskEngineOutput, userContext);
+  const finalDecision = consensusResult.finalDecision;
 
   const aiConsensus = {
-    totalNodes: 5,
-    agreeCount,
-    consensusStrength,
-    recommendation: finalDecision,
-    nodeDecisions,
-    summary: `${agreeCount} out of 5 AI nodes ${finalDecision === 'REVIEW' ? 'suggested cautionary review based on behavioral drift analysis' : finalDecision === 'BLOCKED' ? 'flagged this transaction for immediate blocking' : 'approved this transaction as safe'}`,
+    totalNodes:                     5,
+    agreeCount:                     consensusResult.majorityCount,
+    consensusStrength:              consensusResult.consensusStrength,
+    recommendation:                 finalDecision,
+    summary:                        consensusResult.summary,
+    voteCounts:                     consensusResult.voteCounts,
+    nodeDecisions:                  consensusResult.nodeDecisions,
+    nodeNames:                      consensusResult.nodeNames,
+    nodeIcons:                      consensusResult.nodeIcons,
+    nodeScores:                     consensusResult.nodeScores,
+    nodeConfidences:                consensusResult.nodeConfidences,
+    nodeReasonings:                 consensusResult.nodeReasonings,
+    weightedScore:                  consensusResult.weightedConsensusScore,
+    dissenters:                     consensusResult.dissenters,
+    falsePositiveProtectionApplied: consensusResult.falsePositiveProtectionApplied,
+  };
+
+  const explainableAI = {
+    perNodeReasoning:    consensusResult.nodeReasonings,
+    riskFactorBreakdown: breakdown,
+    weightedScore:       consensusResult.weightedConsensusScore,
+    protectionActive:    consensusResult.falsePositiveProtectionApplied,
+    richSignalsUsed:     consensusResult.richBonusFlags,
   };
 
   // ========== ANALYSIS STEPS ==========
@@ -288,6 +432,7 @@ async function analyzeFraud(params) {
     locationInfo,
     comparisonMatrix,
     aiConsensus,
+    explainableAI,
     analysisSteps,
     variancePct,
   };

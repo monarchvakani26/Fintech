@@ -42,7 +42,108 @@ function getFactorExplanation(factor) {
   return explanations[factor] || 'This factor was flagged by the AI risk assessment engine.';
 }
 
-const NODE_NAMES = ['Conservative', 'Device Sentinel', 'Geo-Intel', 'Behavioral', 'Balanced'];
+// ── NEW: NodeFlipCards — animated 5-node consensus reveal with scores + reasoning ──
+function NodeFlipCards({ nodeNames, nodeIcons, nodeDecisions, nodeScores, nodeConfidences, nodeReasonings }) {
+  const [flipped, setFlipped] = useState([false, false, false, false, false]);
+  const [showReasonings, setShowReasonings] = useState(false);
+
+  useEffect(() => {
+    if (!nodeNames?.length) return;
+    nodeNames.forEach((_, i) => {
+      setTimeout(() => {
+        setFlipped(prev => { const next = [...prev]; next[i] = true; return next; });
+      }, 500 + i * 450);
+    });
+    setTimeout(() => setShowReasonings(true), 500 + (nodeNames.length * 450) + 400);
+  }, [nodeNames]);
+
+  const cfg = {
+    APPROVED: { bg: '#f0fdf4', border: '#86efac', text: '#166534', symbol: '✓' },
+    REVIEW:   { bg: '#fff7ed', border: '#fdba74', text: '#9a3412', symbol: '⚠' },
+    BLOCKED:  { bg: '#fef2f2', border: '#fca5a5', text: '#991b1b', symbol: '✗' },
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-5 gap-3 mb-4">
+        {(nodeNames || []).map((name, i) => {
+          const decision = nodeDecisions?.[i] || 'REVIEW';
+          const score = nodeScores?.[i] || 0;
+          const icon = nodeIcons?.[i] || '🤖';
+          const c = cfg[decision];
+          const isFlipped = flipped[i];
+
+          return (
+            <div key={i} style={{ perspective: '600px', height: '130px' }}>
+              <motion.div
+                style={{ transformStyle: 'preserve-3d', position: 'relative', width: '100%', height: '100%' }}
+                animate={{ rotateY: isFlipped ? 180 : 0 }}
+                transition={{ duration: 0.55, ease: 'easeInOut' }}
+              >
+                {/* Front — analyzing */}
+                <div style={{
+                  backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+                  position: 'absolute', width: '100%', height: '100%',
+                  background: '#f9f4eb', borderRadius: '14px',
+                  border: '1px solid rgba(114,47,55,0.15)',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: '6px',
+                }}>
+                  <div style={{ fontSize: '22px' }}>{icon}</div>
+                  <p style={{ color: 'rgba(20,10,10,0.5)', fontSize: '9px', fontWeight: 700,
+                    textAlign: 'center', letterSpacing: '0.04em', padding: '0 4px' }}>
+                    {name}
+                  </p>
+                  <motion.div
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                    style={{ fontSize: '9px', color: 'rgba(20,10,10,0.35)' }}
+                  >
+                    analyzing...
+                  </motion.div>
+                </div>
+                {/* Back — verdict */}
+                <div style={{
+                  backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                  position: 'absolute', width: '100%', height: '100%',
+                  background: c.bg, borderRadius: '14px',
+                  border: `2px solid ${c.border}`,
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: '3px',
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: c.text }}>{c.symbol}</div>
+                  <p style={{ fontSize: '7px', fontWeight: 800, color: c.text, letterSpacing: '0.07em' }}>{decision}</p>
+                  <p style={{ fontSize: '8px', color: c.text, opacity: 0.6, textAlign: 'center', padding: '0 3px' }}>{name}</p>
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: c.text }}>{score}/100</p>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-node reasoning — Explainable AI */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: showReasonings ? 1 : 0, y: showReasonings ? 0 : 8 }}
+        transition={{ duration: 0.4 }}
+        className="rounded-xl p-4 bg-cream-light border border-cream-dark/20"
+      >
+        <p className="text-[10px] font-bold uppercase tracking-widest text-dark/40 mb-3">Node Reasoning — Explainable AI</p>
+        {(nodeReasonings || []).map((r, i) => (
+          <div key={i} className="flex gap-2 mb-2 items-start">
+            <span style={{ fontSize: '13px', flexShrink: 0 }}>{nodeIcons?.[i] || '🤖'}</span>
+            <div>
+              <span className="text-[10px] font-bold text-dark/70">{nodeNames?.[i]}:</span>
+              <span className="text-[10px] text-dark/50 ml-1">{r}</span>
+            </div>
+          </div>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
 
 // Animated risk score counter
 function AnimatedScore({ value, color }) {
@@ -65,48 +166,7 @@ function AnimatedScore({ value, color }) {
   return <span className={color}>{displayed}</span>;
 }
 
-// AI Node Flip Card
-function NodeCard({ name, decision, index, revealed }) {
-  const decisionConfig = {
-    APPROVED: { bg: 'bg-green-500', text: 'text-white', icon: '✓', label: 'APPROVED' },
-    REVIEW:   { bg: 'bg-orange-400', text: 'text-white', icon: '⚠', label: 'REVIEW' },
-    BLOCKED:  { bg: 'bg-red-600', text: 'text-white', icon: '✗', label: 'BLOCKED' },
-  };
-  const cfg = decisionConfig[decision] || decisionConfig.REVIEW;
 
-  return (
-    <div className="relative" style={{ perspective: 800, height: 100 }}>
-      <motion.div
-        className="absolute inset-0"
-        style={{ transformStyle: 'preserve-3d' }}
-        animate={{ rotateY: revealed ? 180 : 0 }}
-        transition={{ duration: 0.5, delay: index * 0.4, ease: 'easeInOut' }}
-      >
-        {/* Front (hidden) */}
-        <div
-          className="absolute inset-0 rounded-xl bg-dark/10 border border-dark/20 flex items-center justify-center"
-          style={{ backfaceVisibility: 'hidden' }}
-        >
-          <div className="text-center">
-            <div className="text-2xl mb-1">🔒</div>
-            <p className="text-xs text-dark/40 font-semibold">{name}</p>
-          </div>
-        </div>
-        {/* Back (revealed) */}
-        <div
-          className={`absolute inset-0 rounded-xl ${cfg.bg} flex items-center justify-center shadow-lg`}
-          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-        >
-          <div className="text-center">
-            <div className={`text-2xl font-black mb-1 ${cfg.text}`}>{cfg.icon}</div>
-            <p className={`text-xs font-bold ${cfg.text}`}>{name}</p>
-            <p className={`text-xs font-black tracking-wider ${cfg.text} opacity-90`}>{cfg.label}</p>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
 
 // Merkle Tree Visualizer
 function MerkleTree({ hash }) {
@@ -162,8 +222,42 @@ export default function PaymentResult() {
   const qrRef = useRef(null);
   const confettiDone = useRef(false);
 
+  const locationState = location.state || {};
+
   useEffect(() => {
-    fetchResult();
+    // If PaymentAnalysis already passed the full result in location.state, use it directly
+    // This avoids the GET /result/:id auth mismatch for freshly-analyzed real transactions
+    if (locationState.analysisResult) {
+      const ar = locationState.analysisResult;
+      // Build a synthetic transaction object from the analysis result
+      setTransaction({
+        id,
+        reference: ar.transaction?.reference || id.slice(0, 10).toUpperCase(),
+        status: ar.decision || ar.transaction?.status,
+        amount: ar.transaction?.amount || locationState.amount || 0,
+        currency: 'INR',
+        recipient: ar.transaction?.recipient || { vpa: locationState.recipientVPA || '', name: '', icon: '👤' },
+        transactionHash: ar.transactionHash || ar.transaction?.transactionHash,
+        createdAt: ar.transaction?.createdAt || new Date().toISOString(),
+        processedAt: new Date().toISOString(),
+        riskAnalysis: {
+          riskScore:      ar.riskScore,
+          riskFactors:    ar.riskFactors || [],
+          breakdown:      ar.analysisDetails || ar.breakdown || {},
+          aiConsensus:    ar.aiConsensusDetails || ar.aiConsensus || {},
+          explainableAI:  ar.explainableAI || {},
+          comparisonMatrix: ar.comparisonMatrix || {},
+          deviceInfo:     ar.deviceInfo || {},
+          locationInfo:   ar.locationInfo || {},
+          analysisSteps:  ar.analysisSteps || [],
+          variancePct:    ar.variancePct || 0,
+        },
+        note: locationState.note || '',
+      });
+      setLoading(false);
+    } else {
+      fetchResult();
+    }
   }, [id]);
 
   const fetchResult = async () => {
@@ -494,7 +588,7 @@ export default function PaymentResult() {
               </motion.div>
             )}
 
-            {/* AI Node Voting Cards */}
+            {/* AI Node Consensus Voting — NodeFlipCards */}
             {analysis && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -503,31 +597,28 @@ export default function PaymentResult() {
                 className="card p-6"
               >
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-bold uppercase tracking-widest text-dark/50">AI Node Consensus Voting</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-dark/50">AI Consensus Layer — 5 Sovereign Nodes</p>
                   <span className="text-xs font-bold text-dark/40 bg-cream-light px-2 py-1 rounded">
-                    {analysis.aiConsensus?.agreeCount || 3}/5 nodes agreed
+                    {analysis.aiConsensus?.agreeCount || 3}/5 nodes · {analysis.aiConsensus?.consensusStrength || 'Moderate'}
                   </span>
                 </div>
-                <div className="grid grid-cols-5 gap-2 mb-3">
-                  {NODE_NAMES.map((name, i) => (
-                    <NodeCard
-                      key={name}
-                      name={name}
-                      decision={nodeDecisions[i] || status}
-                      index={i}
-                      revealed={nodesRevealed}
-                    />
-                  ))}
-                </div>
+                <NodeFlipCards
+                  nodeNames={analysis.aiConsensus?.nodeNames}
+                  nodeIcons={analysis.aiConsensus?.nodeIcons}
+                  nodeDecisions={analysis.aiConsensus?.nodeDecisions}
+                  nodeScores={analysis.aiConsensus?.nodeScores}
+                  nodeConfidences={analysis.aiConsensus?.nodeConfidences}
+                  nodeReasonings={analysis.aiConsensus?.nodeReasonings}
+                />
                 <AnimatePresence>
-                  {nodesRevealed && (
+                  {(
                     <motion.p
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: 2.2 }}
-                      className="text-xs text-center text-dark/50 mt-2"
+                      transition={{ delay: 3.5 }}
+                      className="text-xs text-center text-dark/50 mt-3 pt-3 border-t border-cream-dark/15"
                     >
-                      {analysis.aiConsensus?.summary || `${analysis.aiConsensus?.agreeCount || 3} out of 5 AI nodes reached consensus`}
+                      {analysis.aiConsensus?.summary || `${analysis.aiConsensus?.agreeCount || 3} of 5 AI nodes reached consensus`}
                     </motion.p>
                   )}
                 </AnimatePresence>

@@ -11,7 +11,8 @@ const store = require('../data/store');
 // GET /api/dashboard
 router.get('/', authMiddleware, (req, res) => {
   const user = req.user;
-  const allTxns = store.getTransactions(user.id);
+  const userId = user.user_id || user.id; // support both MongoDB users and seed users
+  const allTxns = store.getTransactions(userId);
 
   // Balance trend (last 7 days simulated data)
   const balanceTrend = [];
@@ -39,14 +40,20 @@ router.get('/', authMiddleware, (req, res) => {
   const blockedCount = allTxns.filter(t => t.status === 'BLOCKED').length;
   const totalCount = allTxns.length;
 
+  // For balance/trustScore, prefer store user (seed users), fall back to req.user (MongoDB)
+  const storeUser = store.findUserById(userId);
+  const balance = storeUser?.balance ?? user.financial?.estimated_balance ?? 500000;
+  const trustScore = storeUser?.trustScore ?? user.risk?.trust_score ?? 70;
+  const trustStatus = storeUser?.trustStatus ?? 'MODERATE';
+
   res.json({
     success: true,
     data: {
-      balance: user.balance,
+      balance,
       balanceChange: '+12.5',
       balanceTrend,
-      trustScore: user.trustScore,
-      trustStatus: user.trustStatus,
+      trustScore,
+      trustStatus,
       anomalyCount: reviewCount + blockedCount,
       portfolioVariance: '99.9%',
       recentTransactions,
@@ -55,7 +62,7 @@ router.get('/', authMiddleware, (req, res) => {
       reviewCount,
       blockedCount,
       userName: user.name,
-      userAvatar: user.avatar,
+      userAvatar: user.avatar || (user.name ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : 'U'),
     },
   });
 });

@@ -190,6 +190,8 @@ function DnaHeatmap({ transactions }) {
 export default function Dashboard() {
   const [dashData, setDashData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [liveFlash, setLiveFlash] = useState(null); // txn id that just arrived
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -204,7 +206,13 @@ export default function Dashboard() {
   const fetchDashboard = useCallback(async () => {
     try {
       const res = await api.get('/dashboard');
-      if (res.data.success) setDashData(res.data.data);
+      if (res.data.success) {
+        setDashData(res.data.data);
+        // Seed the local recentTransactions from API on first load
+        if (res.data.data?.recentTransactions) {
+          setRecentTransactions(res.data.data.recentTransactions);
+        }
+      }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
     } finally {
@@ -251,6 +259,51 @@ export default function Dashboard() {
     });
     return () => { unsub1(); unsub2(); };
   }, [subscribe, user?.user_id, fetchIntel, fetchDashboard]);
+
+  // ── REAL-TIME transaction updates via Socket.IO ──
+  useEffect(() => {
+    const unsubTxn = subscribe('transaction-update', (payload) => {
+      if (payload.userId !== user?.user_id) return;
+      const txn = payload.transaction;
+      if (!txn) return;
+
+      // Prepend new transaction to the top of the list
+      setRecentTransactions(prev => {
+        const alreadyExists = prev.some(t => t.id === txn.id);
+        if (alreadyExists) {
+          return prev.map(t => t.id === txn.id ? txn : t);
+        }
+        return [txn, ...prev].slice(0, 20);
+      });
+
+      // Also update DNA heatmap
+      setAllTransactions(prev => {
+        const alreadyExists = prev.some(t => t.id === txn.id);
+        return alreadyExists ? prev : [txn, ...prev];
+      });
+
+      // Flash the row
+      setLiveFlash(txn.id);
+      setTimeout(() => setLiveFlash(null), 3000);
+
+      // Refresh stats panel
+      fetchDashboard();
+
+      // Live toast
+      const icon = txn.status === 'APPROVED' ? '✅' : txn.status === 'BLOCKED' ? '🚫' : '⚠️';
+      toast(`${icon} ₹${(txn.amount || 0).toLocaleString('en-IN')} → ${txn.recipient?.vpa || 'unknown'} — ${txn.status}`, {
+        duration: 4000,
+        style: {
+          background: txn.status === 'APPROVED' ? '#f0fdf4' : txn.status === 'BLOCKED' ? '#fef2f2' : '#fff7ed',
+          border: txn.status === 'APPROVED' ? '1px solid #86efac' : txn.status === 'BLOCKED' ? '1px solid #fca5a5' : '1px solid #fdba74',
+          color: '#1a0a0c',
+          fontWeight: 600,
+          fontSize: '13px',
+        },
+      });
+    });
+    return () => unsubTxn();
+  }, [subscribe, user?.user_id, fetchDashboard]);
 
   const fetchAllTransactions = async () => {
     try {
@@ -598,45 +651,62 @@ export default function Dashboard() {
                   ))}
                 </div>
               ))
+            ) : recentTransactions.length === 0 ? (
+              <div className="px-6 py-12 text-center text-dark/40">
+                <p className="font-bold mb-1">No transactions yet</p>
+                <p className="text-xs">Make a payment to see live updates here</p>
+              </div>
             ) : (
-              (dashData?.recentTransactions || []).map((txn, i) => (
-                <motion.div
-                  key={txn.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.08 }}
-                  className="grid grid-cols-6 items-center px-6 py-4 border-b border-cream/50 hover:bg-cream-light/50 transition-colors"
-                >
-                  <div className="text-xs font-bold text-dark/70">{txn.reference}</div>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${
-                      txn.status === 'BLOCKED' ? 'bg-red-100' : txn.status === 'REVIEW' ? 'bg-orange-100' : 'bg-green-100'
+              <AnimatePresence initial={false}>
+                {recentTransactions.map((txn, i) => (
+                  <motion.div
+                    key={txn.id}
+                    initial={{ opacity: 0, y: -12, backgroundColor: '#f0fdf4' }}
+                    animate={{
+                      opacity: 1, y: 0,
+                      backgroundColor: liveFlash === txn.id
+                        ? txn.status === 'BLOCKED' ? '#fef2f2' : txn.status === 'REVIEW' ? '#fff7ed' : '#f0fdf4'
+                        : 'transparent',
+                    }}
+                    transition={{ delay: liveFlash === txn.id ? 0 : i * 0.04, duration: 0.3 }}
+                    className={`grid grid-cols-6 items-center px-6 py-4 border-b border-cream/50 hover:bg-cream-light/50 transition-colors ${
+                      liveFlash === txn.id ? 'ring-1 ring-inset ring-green-300' : ''
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-dark/70 flex items-center gap-1">
+                      {liveFlash === txn.id && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block" />
+                      )}
+                      {txn.reference}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${
+                        txn.status === 'BLOCKED' ? 'bg-red-100' : txn.status === 'REVIEW' ? 'bg-orange-100' : 'bg-green-100'
+                      }`}>
+                        {txn.recipient?.icon || '👤'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-dark leading-tight">{txn.recipient?.name || txn.recipient?.vpa}</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-dark/60 font-medium">{txn.type || 'SEND'}</div>
+                    <div className={`text-sm font-bold tabular-nums ${
+                      txn.status === 'BLOCKED' ? 'text-red-600' : 'text-dark'
                     }`}>
-                      {txn.recipient.icon}
+                      {formatCurrency(txn.amount)}
                     </div>
+                    <div><StatusBadge status={txn.status} /></div>
                     <div>
-                      <p className="text-sm font-semibold text-dark leading-tight">{txn.recipient.name}</p>
+                      <button
+                        onClick={() => navigate(`/payments/result/${txn.id}`)}
+                        className="text-xs text-primary font-semibold hover:text-primary-dark transition-colors"
+                      >
+                        View →
+                      </button>
                     </div>
-                  </div>
-                  <div className="text-xs text-dark/60 font-medium">{txn.type}</div>
-                  <div className={`text-sm font-bold tabular-nums ${
-                    txn.status === 'BLOCKED' ? 'text-red-600' : 'text-dark'
-                  }`}>
-                    {formatCurrency(txn.amount)}
-                  </div>
-                  <div>
-                    <StatusBadge status={txn.status} />
-                  </div>
-                  <div>
-                    <button
-                      onClick={() => navigate(`/payments/result/${txn.id}`)}
-                      className="text-xs text-primary font-semibold hover:text-primary-dark transition-colors"
-                    >
-                      View →
-                    </button>
-                  </div>
-                </motion.div>
-              ))
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             )}
           </div>
         </motion.div>

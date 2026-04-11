@@ -13,7 +13,9 @@ const { updateTrustScoreAfterTransaction } = require('../services/trustScore');
 router.get('/', authMiddleware, (req, res) => {
   const { page = 1, limit = 15, status, search, dateFrom, dateTo, minAmount, maxAmount, riskLevel, sortBy, sortOrder } = req.query;
 
-  const allTxns = store.getTransactions(req.user.id, {
+  const userId = req.user.user_id || req.user.id; // support both MongoDB users and seed users
+
+  const allTxns = store.getTransactions(userId, {
     status: status !== 'ALL' ? status : undefined,
     search,
     dateFrom,
