@@ -1,6 +1,6 @@
 // ============================================================
-// Rakshak AI — Sentinel Dashboard (Real-Time)
-// Displays live user data with WebSocket-driven updates.
+// Rakshak AI — Sentinel Intelligence Dashboard
+// Premium warm-themed live fraud intelligence hub
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,33 +11,35 @@ import {
   User, CreditCard, Wifi, WifiOff, Clock,
   AlertTriangle, CheckCircle, TrendingUp, TrendingDown,
   Monitor, Fingerprint, Globe, Zap, Eye,
-  RefreshCw,
+  RefreshCw, ArrowUpRight, ArrowDownRight, Lock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import api from '../services/api';
 import DashboardLayout from '../components/layout/DashboardLayout';
 
-// ─── Helper components ──────────────────────────────────────
+// ─── Palette helpers ────────────────────────────────────────
 
-function UpdatePulse() {
-  return (
-    <motion.div
-      initial={{ scale: 0, opacity: 1 }}
-      animate={{ scale: 2.5, opacity: 0 }}
-      transition={{ duration: 1.2, ease: 'easeOut' }}
-      className="absolute inset-0 rounded-full bg-emerald-400"
-    />
-  );
-}
+const categoryStyles = {
+  location:  { accent: '#e87040', accentLight: 'rgba(232,112,64,0.1)',  accentMid: 'rgba(232,112,64,0.15)', gradient: 'from-orange-500 to-red-500' },
+  device:    { accent: '#8b5cf6', accentLight: 'rgba(139,92,246,0.1)', accentMid: 'rgba(139,92,246,0.15)', gradient: 'from-violet-500 to-purple-600' },
+  behavior:  { accent: '#0ea5e9', accentLight: 'rgba(14,165,233,0.1)', accentMid: 'rgba(14,165,233,0.15)', gradient: 'from-sky-500 to-cyan-500' },
+  biometric: { accent: '#ec4899', accentLight: 'rgba(236,72,153,0.1)', accentMid: 'rgba(236,72,153,0.15)', gradient: 'from-pink-500 to-rose-500' },
+  user:      { accent: '#722f37', accentLight: 'rgba(114,47,55,0.08)', accentMid: 'rgba(114,47,55,0.14)', gradient: 'from-primary to-primary-dark' },
+  finance:   { accent: '#059669', accentLight: 'rgba(5,150,105,0.1)',  accentMid: 'rgba(5,150,105,0.15)', gradient: 'from-emerald-500 to-teal-600' },
+  trust:     { accent: '#722f37', accentLight: 'rgba(114,47,55,0.06)', accentMid: 'rgba(114,47,55,0.12)', gradient: 'from-primary to-primary-dark' },
+};
 
-function SectionCard({ title, icon: Icon, iconColor, children, lastUpdated, flash }) {
-  const [showPulse, setShowPulse] = useState(false);
+// ─── Reusable Components ────────────────────────────────────
+
+function IntelCard({ title, icon: Icon, category, children, flash }) {
+  const style = categoryStyles[category] || categoryStyles.user;
+  const [pulsing, setPulsing] = useState(false);
 
   useEffect(() => {
     if (flash) {
-      setShowPulse(true);
-      const t = setTimeout(() => setShowPulse(false), 1500);
+      setPulsing(true);
+      const t = setTimeout(() => setPulsing(false), 2000);
       return () => clearTimeout(t);
     }
   }, [flash]);
@@ -45,130 +47,134 @@ function SectionCard({ title, icon: Icon, iconColor, children, lastUpdated, flas
   return (
     <motion.div
       layout
-      className={`
-        rounded-2xl bg-gradient-to-br from-[#0d1117] to-[#161b22]
-        border transition-all duration-500 overflow-hidden
-        ${showPulse ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'border-white/10'}
-      `}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className={`rounded-2xl bg-white border-2 overflow-hidden transition-all duration-500 ${
+        pulsing ? 'border-primary/30 shadow-lg' : 'border-transparent shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
+      }`}
     >
-      <div className="px-5 py-4 border-b border-white/5 flex items-center gap-3">
-        <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${iconColor} flex items-center justify-center shadow-lg relative`}>
-          <Icon className="w-4.5 h-4.5 text-white" />
-          {showPulse && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
-          )}
+      {/* Top accent stripe */}
+      <div className="h-1" style={{ background: `linear-gradient(90deg, ${style.accent}, ${style.accent}88)` }} />
+
+      {/* Header */}
+      <div className="px-5 pt-4 pb-3 flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: style.accentLight }}
+        >
+          <Icon className="w-4 h-4" style={{ color: style.accent }} />
         </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-white">{title}</h3>
-          {lastUpdated && (
-            <p className="text-[10px] text-white/30">
-              Updated {new Date(lastUpdated).toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-        {showPulse && (
+        <h3 className="text-[13px] font-bold text-dark uppercase tracking-wider">{title}</h3>
+        {pulsing && (
           <motion.span
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold"
+            exit={{ opacity: 0 }}
+            className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold text-emerald-700 bg-emerald-100"
           >
-            UPDATED
+            LIVE
           </motion.span>
         )}
       </div>
-      <div className="p-5">
+
+      {/* Body */}
+      <div className="px-5 pb-5">
         {children}
       </div>
     </motion.div>
   );
 }
 
-function MetricItem({ label, value, icon: Icon, valueColor = 'text-white' }) {
+function Metric({ label, value, icon: Icon, status }) {
+  const colorMap = { good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-red-500', default: 'text-dark' };
+  const valColor = colorMap[status] || colorMap.default;
+
   return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className="w-3.5 h-3.5 text-white/30" />}
-        <span className="text-xs text-white/50">{label}</span>
+    <div className="flex items-center justify-between py-2 group">
+      <div className="flex items-center gap-2 min-w-0">
+        {Icon && <Icon className="w-3.5 h-3.5 text-dark/25 flex-shrink-0" />}
+        <span className="text-xs text-dark/50 truncate">{label}</span>
       </div>
-      <span className={`text-sm font-bold ${valueColor}`}>{value || '—'}</span>
+      <span className={`text-sm font-bold ${valColor} tabular-nums flex-shrink-0 ml-3`}>
+        {value || '—'}
+      </span>
     </div>
   );
 }
 
-// ─── Risk Badge ─────────────────────────────────────────────
-
 function RiskBadge({ level }) {
   const config = {
-    LOW: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', icon: ShieldCheck },
-    MEDIUM: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30', icon: Shield },
-    HIGH: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30', icon: ShieldAlert },
-    CRITICAL: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', icon: ShieldX },
+    LOW:      { bg: 'bg-emerald-100', text: 'text-emerald-700', icon: ShieldCheck },
+    MEDIUM:   { bg: 'bg-amber-100',   text: 'text-amber-700',   icon: Shield },
+    HIGH:     { bg: 'bg-orange-100',   text: 'text-orange-700',  icon: ShieldAlert },
+    CRITICAL: { bg: 'bg-red-100',      text: 'text-red-700',     icon: ShieldX },
   };
   const c = config[level] || config.MEDIUM;
   const RiskIcon = c.icon;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${c.bg} ${c.text} ${c.border}`}>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black ${c.bg} ${c.text}`}>
       <RiskIcon className="w-3.5 h-3.5" />
       {level}
     </span>
   );
 }
 
-// ─── Trust Score Gauge ──────────────────────────────────────
+// ─── Trust Score Ring ───────────────────────────────────────
 
-function TrustGauge({ score, prevScore }) {
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const progress = ((score || 0) / 100) * circumference;
-  const offset = circumference - progress;
+function TrustRing({ score, prevScore }) {
+  const r = 64;
+  const circ = 2 * Math.PI * r;
+  const progress = ((score || 0) / 100) * circ;
+  const offset = circ - progress;
+  const s = score || 0;
 
-  const getColor = (s) => {
-    if (s >= 80) return { stroke: '#10b981', glow: 'rgba(16,185,129,0.3)' };
-    if (s >= 55) return { stroke: '#f59e0b', glow: 'rgba(245,158,11,0.3)' };
-    if (s >= 30) return { stroke: '#f97316', glow: 'rgba(249,115,22,0.3)' };
-    return { stroke: '#ef4444', glow: 'rgba(239,68,68,0.3)' };
+  const getColor = () => {
+    if (s >= 80) return '#059669';
+    if (s >= 55) return '#d97706';
+    if (s >= 30) return '#ea580c';
+    return '#dc2626';
   };
-
-  const color = getColor(score || 0);
+  const color = getColor();
   const trending = prevScore !== undefined && score !== prevScore;
-  const trendUp = score > (prevScore || 0);
+  const up = score > (prevScore || 0);
 
   return (
     <div className="relative flex flex-col items-center">
-      <svg width="180" height="180" className="transform -rotate-90">
-        <circle cx="90" cy="90" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="12" />
+      <svg width="160" height="160" className="transform -rotate-90">
+        <circle cx="80" cy="80" r={r} fill="none" stroke="rgba(0,0,0,0.04)" strokeWidth="10" />
         <motion.circle
-          cx="90" cy="90" r={radius}
+          cx="80" cy="80" r={r}
           fill="none"
-          stroke={color.stroke}
-          strokeWidth="12"
+          stroke={color}
+          strokeWidth="10"
           strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
+          strokeDasharray={circ}
+          initial={{ strokeDashoffset: circ }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.5, ease: 'easeOut' }}
-          style={{ filter: `drop-shadow(0 0 8px ${color.glow})` }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <motion.p
           key={score}
-          initial={{ scale: 1.3, opacity: 0 }}
+          initial={{ scale: 1.2, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="text-4xl font-black text-white"
+          className="text-4xl font-black text-dark"
         >
-          {score || 0}
+          {s}
         </motion.p>
-        <p className="text-[10px] uppercase tracking-widest text-white/40 mt-1">Trust Score</p>
+        <p className="text-[10px] uppercase tracking-widest text-dark/35 mt-0.5 font-semibold">Trust Score</p>
         {trending && (
           <motion.div
-            initial={{ opacity: 0, y: 5 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`flex items-center gap-1 mt-1 text-xs font-bold ${trendUp ? 'text-emerald-400' : 'text-red-400'}`}
+            className={`flex items-center gap-0.5 mt-1 text-xs font-bold ${up ? 'text-emerald-600' : 'text-red-500'}`}
           >
-            {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {Math.abs(score - (prevScore || 0))}
+            {up ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+            {Math.abs(score - (prevScore || 0))} pts
           </motion.div>
         )}
       </div>
@@ -176,7 +182,7 @@ function TrustGauge({ score, prevScore }) {
   );
 }
 
-// ─── Main Dashboard ─────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────
 
 export default function SentinelDashboard() {
   const { user } = useAuth();
@@ -187,7 +193,6 @@ export default function SentinelDashboard() {
   const [prevScore, setPrevScore] = useState(undefined);
   const [updateCount, setUpdateCount] = useState(0);
 
-  // Fetch dashboard data
   const fetchData = useCallback(async () => {
     if (!user?.user_id) return;
     try {
@@ -205,21 +210,16 @@ export default function SentinelDashboard() {
     }
   }, [user?.user_id]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Listen for real-time updates
   useEffect(() => {
     const unsub1 = subscribe('user-data-updated', (payload) => {
       if (payload.userId === user?.user_id) {
         setFlashSections(prev => ({ ...prev, [payload.section]: Date.now() }));
         setUpdateCount(prev => prev + 1);
-        // Refresh full data
         fetchData();
       }
     });
-
     const unsub2 = subscribe('risk-score-changed', (payload) => {
       if (payload.userId === user?.user_id) {
         setFlashSections(prev => ({ ...prev, risk: Date.now() }));
@@ -227,7 +227,6 @@ export default function SentinelDashboard() {
         fetchData();
       }
     });
-
     return () => { unsub1(); unsub2(); };
   }, [subscribe, user?.user_id, fetchData]);
 
@@ -236,8 +235,8 @@ export default function SentinelDashboard() {
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-dark/60 font-medium">Loading Sentinel Dashboard...</p>
+            <div className="w-14 h-14 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-dark/50 font-medium">Loading Sentinel Intelligence...</p>
           </div>
         </div>
       </DashboardLayout>
@@ -247,314 +246,257 @@ export default function SentinelDashboard() {
   const d = dashData || {};
   const risk = d.risk || {};
   const financial = d.financial || {};
-  const location = d.location || {};
+  const loc = d.location || {};
   const devices = d.devices || {};
   const behavioral = d.behavioral || {};
   const biometric = d.biometric || {};
   const computed = d.computed || {};
 
+  const completeness = computed.profileCompleteness || 0;
+
   return (
     <DashboardLayout>
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        {/* Header */}
+      <div className="max-w-7xl mx-auto">
+        {/* ── HEADER ── */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-black text-dark flex items-center gap-3">
-              <Shield className="w-7 h-7 text-primary" />
-              Sentinel Dashboard
-            </h1>
-            <p className="text-sm text-dark/50 mt-1">Real-time fraud intelligence hub</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-dark tracking-tight">Sentinel Intelligence</h1>
+                <p className="text-xs text-dark/40 font-medium mt-0.5">Real-time fraud intelligence for <span className="text-primary font-bold">{d.name || 'User'}</span></p>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-dark/40 font-mono">{updateCount} updates</span>
             {connected ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                <Wifi className="w-3.5 h-3.5" /> Live
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
-                <WifiOff className="w-3.5 h-3.5" /> Offline
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-600 text-[11px] font-bold">
+                <WifiOff className="w-3 h-3" /> Offline
               </span>
             )}
             <button
               onClick={fetchData}
-              className="p-2 rounded-lg bg-cream-dark/30 hover:bg-cream-dark/50 text-dark/50 hover:text-dark transition-all"
+              className="w-9 h-9 rounded-xl bg-white border border-cream-dark/20 hover:border-primary/30 flex items-center justify-center text-dark/40 hover:text-primary transition-all shadow-sm"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Top Row — Overview + Trust Gauge */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* User Overview */}
-          <SectionCard
-            title="User Overview"
-            icon={User}
-            iconColor="from-blue-500 to-blue-600"
-            flash={flashSections.basic || flashSections.profile}
-          >
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center text-white font-black text-lg shadow-lg">
-                {(d.name || 'U').slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-lg font-bold text-white">{d.name || 'Unknown User'}</p>
-                <p className="text-xs text-white/40">{d.email}</p>
-                <p className="text-xs text-white/30">{d.phone || 'No phone'}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between pt-3 border-t border-white/5">
-              <RiskBadge level={risk.risk_level || 'MEDIUM'} />
-              <span className="text-xs text-white/30">Status: {d.status || 'ACTIVE'}</span>
-            </div>
-            <div className="mt-3 pt-3 border-t border-white/5">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-white/40">Profile Completeness</span>
-                <span className="text-xs font-bold text-white">{computed.profileCompleteness || 0}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-white/5 mt-2 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
-                  animate={{ width: `${computed.profileCompleteness || 0}%` }}
-                  transition={{ duration: 1 }}
-                />
-              </div>
-            </div>
-          </SectionCard>
+        {/* ── ROW 1 — Risk + Trust + Profile ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+          {/* Risk & Trust Card — Spans 2 cols */}
+          <div className="lg:col-span-2 rounded-2xl bg-white border-2 border-transparent shadow-[0_1px_6px_rgba(0,0,0,0.06)] overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary/20" />
+            <div className="p-6 flex flex-col sm:flex-row items-center gap-8">
+              {/* Trust Ring */}
+              <TrustRing score={risk.trust_score} prevScore={prevScore} />
 
-          {/* Trust Score Gauge */}
-          <SectionCard
-            title="Trust Score"
-            icon={Shield}
-            iconColor="from-emerald-500 to-teal-600"
-            flash={flashSections.risk}
-          >
-            <div className="flex justify-center">
-              <TrustGauge score={risk.trust_score} prevScore={prevScore} />
-            </div>
-            {risk.factors?.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {risk.factors.slice(0, 3).map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <AlertTriangle className="w-3 h-3 text-amber-400" />
-                    <span className="text-white/60">{f}</span>
+              {/* Risk Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-dark/35 font-semibold mb-1">Risk Level</p>
+                    <RiskBadge level={risk.risk_level || 'MEDIUM'} />
                   </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
+                </div>
 
-          {/* Financial */}
-          <SectionCard
-            title="Financial Profile"
-            icon={CreditCard}
-            iconColor="from-emerald-500 to-teal-600"
-            flash={flashSections.financial}
-          >
-            <div className="space-y-1">
-              <MetricItem label="Card" value={financial.card_last4 ? `•••• ${financial.card_last4}` : null} icon={CreditCard} />
-              <MetricItem label="Card Type" value={financial.card_type} icon={CreditCard} />
-              <MetricItem label="Bank" value={financial.bank_name} icon={Globe} />
-              <MetricItem
-                label="Avg Balance"
-                value={financial.avg_balance ? `₹${Number(financial.avg_balance).toLocaleString('en-IN')}` : null}
-                icon={TrendingUp}
-                valueColor="text-emerald-400"
-              />
+                {/* Risk Factors */}
+                {risk.factors?.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <p className="text-[10px] uppercase tracking-widest text-dark/35 font-semibold">Active Alerts</p>
+                    {risk.factors.slice(0, 3).map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                        <span className="text-xs text-amber-800 font-medium">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center px-3 py-2.5 rounded-xl bg-cream/60">
+                    <p className="text-lg font-black text-dark tabular-nums">{computed.totalDevices || 0}</p>
+                    <p className="text-[10px] text-dark/35 font-semibold uppercase">Devices</p>
+                  </div>
+                  <div className="text-center px-3 py-2.5 rounded-xl bg-cream/60">
+                    <p className="text-lg font-black text-dark tabular-nums">{computed.trustedDeviceCount || 0}</p>
+                    <p className="text-[10px] text-dark/35 font-semibold uppercase">Trusted</p>
+                  </div>
+                  <div className="text-center px-3 py-2.5 rounded-xl bg-cream/60">
+                    <p className="text-lg font-black tabular-nums" style={{ color: biometric.enabled ? '#059669' : '#dc2626' }}>
+                      {biometric.enabled ? 'ON' : 'OFF'}
+                    </p>
+                    <p className="text-[10px] text-dark/35 font-semibold uppercase">Biometric</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </SectionCard>
+          </div>
+
+          {/* Profile Completeness */}
+          <div className="rounded-2xl bg-white border-2 border-transparent shadow-[0_1px_6px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col">
+            <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-400" />
+            <div className="p-6 flex-1 flex flex-col">
+              {/* User Avatar */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white font-black text-base shadow-md">
+                  {(d.name || 'U').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-dark truncate">{d.name || 'Unknown User'}</p>
+                  <p className="text-[11px] text-dark/40 truncate">{d.email}</p>
+                </div>
+              </div>
+
+              <div className="flex-1" />
+
+              {/* Completion Ring + Bar */}
+              <div>
+                <div className="flex items-end justify-between mb-2">
+                  <p className="text-[10px] uppercase tracking-widest text-dark/35 font-semibold">Profile Completeness</p>
+                  <span className="text-2xl font-black text-dark tabular-nums">{completeness}%</span>
+                </div>
+                <div className="h-2.5 rounded-full bg-cream overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: completeness >= 70 ? 'linear-gradient(90deg, #059669, #10b981)' : completeness >= 40 ? 'linear-gradient(90deg, #d97706, #f59e0b)' : 'linear-gradient(90deg, #dc2626, #ef4444)' }}
+                    animate={{ width: `${completeness}%` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                  />
+                </div>
+                <p className="text-[10px] text-dark/30 mt-2">
+                  {completeness < 50 ? 'Complete your profile to improve trust score' : completeness < 80 ? 'Good progress — keep going' : 'Excellent profile coverage'}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Bottom Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Location Panel */}
-          <SectionCard
-            title="Location Intelligence"
-            icon={MapPin}
-            iconColor="from-orange-500 to-red-600"
-            flash={flashSections.location}
-          >
-            <div className="space-y-1">
-              <MetricItem
-                label="Current"
-                value={location.last_location?.lat
-                  ? `${Number(location.last_location.lat).toFixed(4)}, ${Number(location.last_location.lng).toFixed(4)}`
+        {/* ── ROW 2 — Intelligence Cards ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Location */}
+          <IntelCard title="Location" icon={MapPin} category="location" flash={flashSections.location}>
+            <div className="space-y-0.5">
+              <Metric label="Current" icon={MapPin}
+                value={loc.last_location?.lat
+                  ? `${Number(loc.last_location.lat).toFixed(3)}, ${Number(loc.last_location.lng).toFixed(3)}`
                   : null
                 }
-                icon={MapPin}
               />
-              <MetricItem
-                label="Home City"
-                value={location.home_location?.city}
-                icon={Globe}
-              />
-              <MetricItem
-                label="Distance from Home"
+              <Metric label="Home City" icon={Globe} value={loc.home_location?.city} />
+              <Metric label="Distance" icon={MapPin}
                 value={computed.distanceFromHome}
-                icon={MapPin}
-                valueColor={
-                  computed.distanceFromHome && parseFloat(computed.distanceFromHome) > 500
-                    ? 'text-red-400'
-                    : 'text-emerald-400'
-                }
+                status={computed.distanceFromHome && parseFloat(computed.distanceFromHome) > 500 ? 'bad' : 'good'}
               />
-              <MetricItem
-                label="Usual Locations"
-                value={location.usual_locations?.length ? location.usual_locations.join(', ') : null}
-                icon={Globe}
+              <Metric label="Usual" icon={Globe}
+                value={loc.usual_locations?.length ? loc.usual_locations.join(', ') : null}
               />
             </div>
-          </SectionCard>
+          </IntelCard>
 
-          {/* Device Panel */}
-          <SectionCard
-            title="Device Intelligence"
-            icon={Smartphone}
-            iconColor="from-purple-500 to-violet-600"
-            flash={flashSections.device}
-          >
-            <div className="space-y-1">
-              <MetricItem
-                label="Current Device"
-                value={devices.last_used_device ? devices.last_used_device.slice(0, 12) + '...' : null}
-                icon={Monitor}
-              />
-              <MetricItem
-                label="Trusted Devices"
+          {/* Devices */}
+          <IntelCard title="Devices" icon={Smartphone} category="device" flash={flashSections.device}>
+            <div className="space-y-0.5">
+              <Metric label="Trusted" icon={Fingerprint}
                 value={`${computed.trustedDeviceCount || 0} / ${computed.totalDevices || 0}`}
-                icon={Fingerprint}
-                valueColor="text-emerald-400"
+                status="good"
+              />
+              <Metric label="Current" icon={Monitor}
+                value={devices.last_used_device ? devices.last_used_device.slice(0, 12) + '…' : null}
               />
             </div>
-
             {devices.trusted_devices?.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
-                {devices.trusted_devices.slice(0, 3).map((dev, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/5">
-                    <div className={`w-2 h-2 rounded-full ${dev.trusted ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">{dev.os || 'Unknown'}</p>
-                      <p className="text-[10px] text-white/30">{dev.browser || 'Unknown browser'}</p>
-                    </div>
-                    <span className={`text-[10px] font-bold ${dev.trusted ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {dev.trusted ? 'TRUSTED' : 'UNTRUSTED'}
-                    </span>
+              <div className="mt-3 pt-3 border-t border-cream-dark/10 space-y-1.5">
+                {devices.trusted_devices.slice(0, 2).map((dev, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-cream/50">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dev.trusted ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                    <span className="text-[11px] text-dark/60 font-medium truncate">{dev.os || 'Unknown'} · {dev.browser || 'Unknown'}</span>
                   </div>
                 ))}
               </div>
             )}
-          </SectionCard>
+          </IntelCard>
 
-          {/* Behavior Panel */}
-          <SectionCard
-            title="Behavioral Analytics"
-            icon={Activity}
-            iconColor="from-cyan-500 to-blue-600"
-            flash={flashSections.behavior}
-          >
-            <div className="space-y-1">
-              <MetricItem
-                label="Typing Speed"
+          {/* Behavior */}
+          <IntelCard title="Behavior" icon={Activity} category="behavior" flash={flashSections.behavior}>
+            <div className="space-y-0.5">
+              <Metric label="Typing Speed" icon={Zap}
                 value={behavioral.typing_speed_avg ? `${behavioral.typing_speed_avg.toFixed(1)} cps` : null}
-                icon={Zap}
               />
-              <MetricItem
-                label="Avg Session"
+              <Metric label="Avg Session" icon={Clock}
                 value={behavioral.session_duration_avg
                   ? `${Math.floor(behavioral.session_duration_avg / 60)}m ${Math.floor(behavioral.session_duration_avg % 60)}s`
                   : null
                 }
-                icon={Clock}
               />
-              <MetricItem
-                label="Active Hours"
+              <Metric label="Active Hours" icon={Activity}
                 value={behavioral.usual_active_hours
-                  ? `${behavioral.usual_active_hours.start}:00 – ${behavioral.usual_active_hours.end}:00`
+                  ? `${behavioral.usual_active_hours.start}:00–${behavioral.usual_active_hours.end}:00`
                   : null
                 }
-                icon={Activity}
               />
-              <MetricItem
-                label="Avg Txn Amount"
+              <Metric label="Avg Txn" icon={TrendingUp}
                 value={behavioral.avg_transaction_amount
                   ? `₹${Number(behavioral.avg_transaction_amount).toLocaleString('en-IN')}`
                   : null
                 }
-                icon={TrendingUp}
               />
             </div>
-          </SectionCard>
+          </IntelCard>
 
-          {/* Biometric Panel */}
-          <SectionCard
-            title="Biometric Status"
-            icon={ScanFace}
-            iconColor="from-rose-500 to-pink-600"
-            flash={flashSections.biometric}
-          >
-            <div className="flex flex-col items-center py-4">
-              <div className={`
-                w-16 h-16 rounded-2xl flex items-center justify-center mb-3
-                ${biometric.enabled
-                  ? 'bg-emerald-500/20 shadow-lg shadow-emerald-500/10'
-                  : 'bg-white/5'
+          {/* Biometric */}
+          <IntelCard title="Biometric" icon={ScanFace} category="biometric" flash={flashSections.biometric}>
+            <div className="flex flex-col items-center py-3 mb-3">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-2 ${
+                biometric.enabled
+                  ? 'bg-emerald-50 border-2 border-emerald-200'
+                  : 'bg-cream border-2 border-cream-dark/15'
+              }`}>
+                {biometric.enabled
+                  ? <CheckCircle className="w-7 h-7 text-emerald-500" />
+                  : <ScanFace className="w-7 h-7 text-dark/20" />
                 }
-              `}>
-                {biometric.enabled ? (
-                  <CheckCircle className="w-8 h-8 text-emerald-400" />
-                ) : (
-                  <ScanFace className="w-8 h-8 text-white/20" />
-                )}
               </div>
-              <p className={`text-sm font-bold ${biometric.enabled ? 'text-emerald-400' : 'text-white/40'}`}>
+              <p className={`text-xs font-bold ${biometric.enabled ? 'text-emerald-600' : 'text-dark/35'}`}>
                 {biometric.enabled ? 'Verified' : 'Not Registered'}
               </p>
-              {biometric.has_embedding && (
-                <p className="text-[10px] text-white/30 mt-1">
-                  {biometric.embedding_model} | {biometric.verification_confidence ? `${Math.round(biometric.verification_confidence * 100)}%` : '—'} confidence
-                </p>
-              )}
             </div>
-
-            <div className="space-y-1 pt-3 border-t border-white/5">
-              <MetricItem
-                label="Status"
+            <div className="space-y-0.5 pt-3 border-t border-cream-dark/10">
+              <Metric label="Status" icon={Eye}
                 value={biometric.enabled ? 'Active' : 'Inactive'}
-                icon={Eye}
-                valueColor={biometric.enabled ? 'text-emerald-400' : 'text-red-400'}
+                status={biometric.enabled ? 'good' : 'bad'}
               />
-              <MetricItem
-                label="Last Verified"
-                value={biometric.last_verified ? new Date(biometric.last_verified).toLocaleString() : null}
-                icon={Clock}
-              />
-              <MetricItem
-                label="Model"
-                value={biometric.embedding_model}
-                icon={ScanFace}
+              <Metric label="Model" icon={ScanFace} value={biometric.embedding_model} />
+              <Metric label="Last Verified" icon={Clock}
+                value={biometric.last_verified ? new Date(biometric.last_verified).toLocaleDateString() : null}
               />
             </div>
-          </SectionCard>
+          </IntelCard>
         </div>
 
-        {/* Real-time Activity Feed */}
+        {/* ── LIVE ACTIVITY FOOTER ── */}
         {updateCount > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-[#0d1117] to-[#161b22] border border-white/10"
+            className="mt-5 px-5 py-3.5 rounded-2xl bg-white border border-emerald-200/60 flex items-center gap-3"
           >
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="text-sm font-bold text-white">Real-Time Activity</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold ml-auto">
-                {updateCount} live updates
-              </span>
-            </div>
-            <p className="text-xs text-white/40">
-              Dashboard is receiving live updates via WebSocket. Any changes to user data will automatically reflect here without page reload.
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+            <p className="text-xs text-dark/50 font-medium flex-1">
+              Receiving live intelligence updates via WebSocket
             </p>
+            <span className="text-[11px] px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold tabular-nums">
+              {updateCount} updates
+            </span>
           </motion.div>
         )}
       </div>

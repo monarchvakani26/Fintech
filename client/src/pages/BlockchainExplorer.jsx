@@ -126,6 +126,9 @@ export default function BlockchainExplorer() {
   const blockedCount = chain.filter(b => b.status === 'BLOCKED').length;
   const reviewCount = chain.filter(b => b.status === 'REVIEW').length;
 
+  // Only show valid (APPROVED) transactions in the history grid
+  const validChain = chain.filter(b => b.status === 'APPROVED');
+
   return (
     <DashboardLayout>
       <div className="max-w-6xl">
@@ -135,7 +138,7 @@ export default function BlockchainExplorer() {
             <p className="text-xs font-semibold uppercase tracking-widest text-dark/50 mb-1">Immutable Ledger</p>
             <h1 className="text-4xl font-black text-dark">Blockchain Explorer</h1>
             <div className="flex items-center gap-3 mt-2">
-              <span className="text-sm text-dark/50">{chain.length} blocks mined</span>
+              <span className="text-sm text-dark/50">{chain.length} blocks mined · {approvedCount} valid transactions</span>
               <span className="text-dark/20">•</span>
               <div className="relative">
                 <button
@@ -297,8 +300,8 @@ export default function BlockchainExplorer() {
         </motion.div>
 
         {/* Blockchain Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" ref={scrollRef}>
-          {chain.map((block, index) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start" ref={scrollRef}>
+          {validChain.map((block, index) => {
             const isTampered = !isChainValid && verification?.errorIndex === index;
             const isSelected = selectedBlock === index;
             const isGenesis = index === 0;

@@ -20,9 +20,12 @@ export default function Header() {
   const navigate = useNavigate();
 
   return (
-    <header className="bg-white/80 backdrop-blur-sm border-b border-cream-dark/20 px-8 py-0 flex items-center justify-between sticky top-0 z-20 h-14">
-      {/* Tabs */}
-      <nav className="flex items-center gap-1 h-full">
+    <header className="bg-white border-b-2 border-[#d9c9a8] px-6 py-0 flex items-center sticky top-0 z-20 h-14 flex-shrink-0">
+      {/* Left spacer — mirrors right side width so tabs stay centered */}
+      <div className="w-32 flex-shrink-0" />
+
+      {/* Tabs — centered */}
+      <nav className="flex-1 flex items-center justify-center gap-1 h-full">
         {headerTabs.map(({ to, label }) => {
           const isActive = location.pathname === to ||
             (to === '/payments' && location.pathname.startsWith('/payments'));
@@ -30,15 +33,15 @@ export default function Header() {
             <Link
               key={to}
               to={to}
-              className={`relative px-4 h-14 flex items-center text-sm font-medium transition-colors duration-200 ${
+              className={`relative px-5 h-14 flex items-center text-sm font-semibold transition-colors duration-200 ${
                 isActive
                   ? 'text-primary'
-                  : 'text-dark/50 hover:text-dark'
+                  : 'text-dark/45 hover:text-dark'
               }`}
             >
               {label}
               {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+                <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-primary rounded-t-full" />
               )}
             </Link>
           );
@@ -46,20 +49,20 @@ export default function Header() {
       </nav>
 
       {/* Right Side */}
-      <div className="flex items-center gap-3">
+      <div className="w-32 flex-shrink-0 flex items-center gap-2 justify-end">
         <button className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-cream transition-colors">
-          <Bell className="w-5 h-5 text-dark/50" />
+          <Bell className="w-4.5 h-4.5 text-dark/50" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
         </button>
         <button
           onClick={() => navigate('/settings')}
           className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-cream transition-colors"
         >
-          <Settings className="w-5 h-5 text-dark/50" />
+          <Settings className="w-4.5 h-4.5 text-dark/50" />
         </button>
         <button
           onClick={() => navigate('/settings')}
-          className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white text-sm font-bold hover:bg-primary-dark transition-colors"
+          className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white text-xs font-bold hover:bg-primary-dark transition-colors"
         >
           {user?.avatar || user?.name?.substring(0, 2)?.toUpperCase() || 'AS'}
         </button>
